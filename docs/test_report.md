@@ -4,11 +4,11 @@
 - **Execution Date**: 2026-10-21
 - **Platform**: Windows 11 (NT 10.0.26300.0), Python 3.13.2 (64-bit)
 - **Test Framework**: `pytest-9.1.1`, `pluggy-1.7.0`
-- **Total Tests Discovered**: 41
-- **Tests Passed**: 41 (100.0%)
+- **Total Tests Discovered**: 43
+- **Tests Passed**: 43 (100.0%)
 - **Tests Failed**: 0
 - **Tests Skipped**: 0
-- **Total Execution Time**: 1.07 seconds
+- **Total Execution Time**: 2.21 seconds
 
 ---
 
@@ -34,6 +34,8 @@
 | TC-API-04 | `test_upload_missing_file` | **PASSED** | Returns HTTP 400 when multipart request lacks file payload |
 | TC-API-05 | `test_load_sample_and_inspect_metrics`| **PASSED** | Loads 60-packet sample and validates stats, protocols, timeline, alerts, flows, and 404s |
 | TC-API-06 | `test_alerts_config_api` | **PASSED** | Verifies `GET /api/alerts/config`, `POST /api/alerts/config`, and rejection of malformed JSON with HTTP 400 |
+| TC-API-07 | `test_alert_fields_integrity_and_no_undefined` | **PASSED** | Verifies all alerts contain valid strings for `observed_value` and `threshold`, eliminating `undefined` |
+| TC-API-08 | `test_flows_api_matches_stats_flow_count` | **PASSED** | Verifies `/api/flows` returns `total_flows` matching `/api/stats` `active_flows` and valid schema |
 
 ### C. Filtering, Flow Tracking & Export (`tests/test_filters.py`)
 | Test ID | Test Name | Status | Verified Outcome |
@@ -94,3 +96,9 @@
    - *Remediation*: Utilized payload chaining and indexed access with upstream warning filtering in `pytest.ini`.
 4. **Distinction of Heuristic Alerts vs Observable Facts**: Alert titles previously implied definitive security intrusions without stating heuristic bounds.
    - *Remediation*: Prefixed with `Heuristic: ... (Unconfirmed)` or `Observation: ...`, attaching exact time window, threshold, observed value, and supporting packet references.
+5. **Alert Card `undefined` Field Bug**: Frontend alert card templates accessed `alt.observed` and `alt.threshold`, whereas backend detector populated `observed_metric` and `configured_threshold`, rendering `Observed: undefined` and `Threshold: undefined`.
+   - *Remediation*: Normalized both backend dictionary keys and SQLite schema to provide `observed_value` / `observed_metric` and `threshold` / `configured_threshold`, with defensive frontend fallbacks and regression tests.
+6. **Active Flow Count Inconsistency**: The top KPI card displayed total active 5-tuple flows (52), while the flows card fetched top talkers with a hard-coded limit of 8, causing user confusion.
+   - *Remediation*: Created dedicated `/api/flows?limit=...` endpoint returning `total_flows` alongside paginated/filtered flows, and labeled the card dynamically: `Showing Top 10 of 52 Flows`.
+7. **Single-Theme Limitation & Visual Ergonomics**: Previous dashboard supported dark mode only and suffered from nested scrollbars, unstyled default browser controls, and poor contrast in bright lab lighting.
+   - *Remediation*: Implemented NetScope 2.0 Design System with complete Light and Dark theme tokens, zero-flash startup script, local storage persistence, live Plotly chart relayout without data reloading, and full keyboard accessibility.

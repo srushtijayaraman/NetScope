@@ -136,3 +136,66 @@ def test_alerts_config_api(client):
     assert res_inv.status_code == 400
 
 
+def test_alert_fields_integrity_and_no_undefined(client):
+    """Verify all alerts include valid observed_value and threshold strings (no 'undefined')."""
+    res_load = client.post("/api/captures/load-sample")
+    assert res_load.status_code == 200
+
+    res_alerts = client.get("/api/alerts")
+    assert res_alerts.status_code == 200
+    alerts = res_alerts.json["alerts"]
+    assert len(alerts) > 0
+
+    for alert in alerts:
+        # Check that observed_value exists and is a meaningful string
+        assert "observed_value" in alert
+        assert alert["observed_value"] is not None
+        assert alert["observed_value"] != "undefined"
+        assert len(str(alert["observed_value"]).strip()) > 0
+
+        # Check threshold exists and is a meaningful string
+        assert "threshold" in alert
+        assert alert["threshold"] is not None
+        assert alert["threshold"] != "undefined"
+        assert len(str(alert["threshold"]).strip()) > 0
+
+        # Check time window, host, classification
+        assert "time_window" in alert
+        assert alert["time_window"] is not None
+        assert "host" in alert
+        assert alert["host"] is not None
+        assert "classification_nature" in alert
+
+
+def test_flows_api_matches_stats_flow_count(client):
+    """Verify /api/flows returns accurate counts matching /api/stats active_flows."""
+    res_load = client.post("/api/captures/load-sample")
+    assert res_load.status_code == 200
+
+    res_stats = client.get("/api/stats")
+    assert res_stats.status_code == 200
+    stats = res_stats.json
+    expected_flows = stats.get("active_flows", 0)
+    assert expected_flows > 0
+
+    # Test default limit
+    res_flows = client.get("/api/flows?limit=10")
+    assert res_flows.status_code == 200
+    flows_data = res_flows.json
+    assert "flows" in flows_data
+    assert "total_flows" in flows_data
+    assert flows_data["total_flows"] == expected_flows
+    assert len(flows_data["flows"]) <= 10
+
+    # Validate first flow schema
+    first_flow = flows_data["flows"][0]
+    assert "flow_id" in first_flow
+    assert "endpoint_a" in first_flow
+    assert "endpoint_b" in first_flow
+    assert "transport_protocol" in first_flow
+    assert "total_packets" in first_flow
+    assert "total_bytes" in first_flow
+    assert "tcp_state" in first_flow
+
+
+

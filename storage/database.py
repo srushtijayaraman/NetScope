@@ -128,4 +128,15 @@ class DatabaseManager:
                 cursor.execute("SELECT * FROM alerts WHERE capture_id = ? ORDER BY id DESC LIMIT ?", (capture_id, limit))
             else:
                 cursor.execute("SELECT * FROM alerts ORDER BY id DESC LIMIT ?", (limit,))
-            return [dict(row) for row in cursor.fetchall()]
+            rows = cursor.fetchall()
+            alerts = []
+            for row in rows:
+                item = dict(row)
+                item["observed_value"] = item.get("observed_metric") or item.get("observed_value") or "Not applicable"
+                item["threshold"] = item.get("configured_threshold") or item.get("threshold") or "Not specified"
+                try:
+                    item["packet_references"] = json.loads(item.get("packet_references") or "[]")
+                except Exception:
+                    item["packet_references"] = []
+                alerts.append(item)
+            return alerts

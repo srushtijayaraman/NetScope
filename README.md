@@ -3,27 +3,50 @@
 [![Python](https://img.shields.io/badge/Python-3.13-blue.svg)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.1.3-green.svg)](https://flask.palletsprojects.com/)
 [![Scapy](https://img.shields.io/badge/Scapy-2.8.0-red.svg)](https://scapy.net/)
-[![Tests](https://img.shields.io/badge/Tests-41%20Passed-emerald.svg)](docs/test_report.md)
+[![Tests](https://img.shields.io/badge/Tests-43%20Passed-emerald.svg)](docs/test_report.md)
+[![Themes](https://img.shields.io/badge/UI-Dark%20%7C%20Light%20Modes-indigo.svg)]()
 [![Academic](https://img.shields.io/badge/Category-Computer%20Networks%20Mini--Project-purple.svg)]()
 
-> **Computer Networks Laboratory Mini-Project Deliverable**  
-> An autonomous, mathematically verified network packet analyzer, statistical intelligence engine, and interactive dark-mode web dashboard.
+> **Computer Networks Laboratory Mini-Project Deliverable (Release 2.0)**  
+> An autonomous, mathematically verified network packet analyzer, statistical intelligence engine, and interactive professional web dashboard with dual Light/Dark theme support.
+
+---
+
+## NetScope 2.0 Interface Preview
+
+| Dark Theme (Default Lab Mode) | Light Theme (Auditorium & Print Mode) |
+|:---:|:---:|
+| ![NetScope 2.0 Dark Theme Dashboard](docs/screenshots/dashboard_dark.png) | ![NetScope 2.0 Light Theme Dashboard](docs/screenshots/dashboard_light.png) |
+
+| Deep Packet Layer Inspector | Explainable Security Anomaly Cards |
+|:---:|:---:|
+| ![Packet Inspector Modal](docs/screenshots/packet_inspector_modal.png) | ![Security Alerts View](docs/screenshots/security_alerts.png) |
 
 ---
 
 ## 1. Project Overview & Highlights
 NetScope ingests network packet captures (offline `.pcap` / `.pcapng` files and live network interfaces), parses multi-layer protocols, computes academically verified traffic metrics, detects stateful security anomalies (SYN floods, port scans), groups conversations into 5-tuple flows, and visualizes the results on an interactive web dashboard with zero external CDN dependencies.
 
-### Core Features:
+### Core Features & What's New in NetScope 2.0:
+- **Professional Dual-Theme System (Light & Dark)**:
+  - Engineered with comprehensive semantic design tokens (`--bg-canvas`, `--surface-card`, `--text-primary`, `--border-subtle`).
+  - Single-click theme switcher in header with instant transition and zero page reload.
+  - Zero-flash startup using inline DOM script; automatically honors OS system preference (`prefers-color-scheme`) with persistent `localStorage`.
+  - **Dynamic Plotly Relayout**: Real-time chart recoloring without re-fetching network datasets or redrawing from scratch.
 - **Offline PCAP Ingestion**: Incremental, memory-bounded reading of PCAP/PCAPNG captures with stream closure guarantees and sub-millisecond parsing.
 - **Deep Protocol Decoding**: Detailed multi-layer extraction across Ethernet, ARP, IPv4, IPv6, TCP, UDP, ICMP, DNS, HTTP, and TLS.
   - **Comprehensive DNS Parsing**: Decodes transaction ID, query names, query type names (`A`, `AAAA`, `CNAME`, `MX`, `TXT`, `PTR`, `NS`, `SOA`), flags (`AA`, `TC`, `RD`, `RA`), response codes (`NOERROR`, `NXDOMAIN`, `SERVFAIL`), and answer records.
 - **Strict Classification**: Validates application-layer payload byte signatures (HTTP verbs, TLS record headers) rather than guessing from port numbers alone.
 - **Deterministic Analytics**: Throughput (bps/kbps/Mbps), packets-per-second (PPS), average packet size, capture duration, protocol percentages, relative timing from $t_0 = 0.000\text{s}$, and chronological time buckets.
-- **Canonical Flow Tracking**: Symmetric 5-tuples `(IP A, IP B, Protocol, Port A, Port B)` tracking bidirectional conversations, forward/reverse volumes, inter-arrival durations, TCP connection states (`SYN_SENT`, `SYN_ACK`, `ESTABLISHED`, `RESET`, `CLOSING`, `CLOSED`), and per-flow packet filtering.
-- **Explainable Anomaly Alerts**: Heuristic detection distinguishing observable traffic facts from unconfirmed suspicions. Flags rapid SYN bursts, vertical/horizontal multi-port scans, packet rate spikes, and dominant hosts. Every alert attaches exact observed values, thresholds, sliding time windows, and supporting packet references.
+- **Canonical Flow Tracking & Consistent Counting**:
+  - Symmetric 5-tuples `(IP A, IP B, Protocol, Port A, Port B)` tracking bidirectional conversations, forward/reverse volumes, inter-arrival durations, TCP connection states (`SYN_SENT`, `SYN_ACK`, `ESTABLISHED`, `RESET`, `CLOSING`, `CLOSED`), and per-flow packet filtering.
+  - Dynamic flow table limit selection (10, 25, 50, All) with synchronized `Showing Top X of Y Flows` badge matching top-level KPI metrics.
+- **Explainable Anomaly Alerts (Zero `undefined` Artifacts)**:
+  - Heuristic detection distinguishing observable traffic facts from unconfirmed suspicions. Flags rapid SYN bursts, vertical/horizontal multi-port scans, packet rate spikes, and dominant hosts.
+  - Every alert displays verified strings for **Observed Value**, **Configured Threshold**, **Sliding Time Window**, **Affected Host**, and **Target**.
+  - **Interactive Packet Evidence Links**: Clickable supporting packet badges jump straight into the Protocol Layer Inspector for that exact frame.
 - **Dynamic Threshold Configuration**: Runtime threshold adjustment modal and API (`GET/POST /api/alerts/config`) enabling instant tuning without restarting the server.
-- **Packet Explorer**: High-performance grid with sub-millisecond search, combinable protocol/IP/port/packet ID/flow ID filters, pagination, click-to-inspect detail modal, and RFC 4180 CSV export.
+- **Packet Explorer**: High-performance grid with sticky table headers, sub-millisecond search, combinable protocol/IP/port/packet ID/flow ID filters, pagination, click-to-inspect detail modal, and RFC 4180 CSV export.
 - **Defensive Robustness**: Gracefully handles malformed, truncated, or unhandled packets without crashing, labeling them as `Malformed` with diagnostic reasons.
 - **Offline Readiness**: Self-contained frontend bundle with local Plotly.js (`plotly.min.js`), requiring no active internet connection.
 
@@ -206,7 +229,7 @@ http://127.0.0.1:5000
 ```powershell
 .\.venv\Scripts\pytest.exe -v
 ```
-All **41 tests** pass with 100% success rate in ~1.07 seconds.
+All **43 tests** pass with 100% success rate in ~2.21 seconds.
 
 ### Run Performance & Correctness Benchmarks:
 ```powershell

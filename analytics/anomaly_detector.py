@@ -114,7 +114,9 @@ class AnomalyDetector:
                         "host": src_ip,
                         "target": dst_ip,
                         "observed_value": f"{len(history)} standalone SYNs",
+                        "observed_metric": f"{len(history)} standalone SYNs",
                         "threshold": f"{self.syn_flood_threshold} SYNs in 5.0s window",
+                        "configured_threshold": f"{self.syn_flood_threshold} SYNs in 5.0s window",
                         "time_window": "5.0s sliding window",
                         "explanation": (
                             f"Observed {len(history)} standalone TCP SYN frames from host {src_ip} within 5.0 seconds. "
@@ -158,7 +160,9 @@ class AnomalyDetector:
                         "host": src_ip,
                         "target": dst_ip if len(unique_targets) == 1 else f"{len(unique_targets)} Distinct Hosts",
                         "observed_value": f"{len(unique_ports)} distinct ports probed",
+                        "observed_metric": f"{len(unique_ports)} distinct ports probed",
                         "threshold": f"{self.port_scan_threshold} ports in 5.0s window",
+                        "configured_threshold": f"{self.port_scan_threshold} ports in 5.0s window",
                         "time_window": "5.0s sliding window",
                         "explanation": (
                             f"Host {src_ip} queried {len(unique_ports)} distinct destination ports within 5.0 seconds ({scan_type}). "
@@ -200,7 +204,9 @@ class AnomalyDetector:
                         "host": "Monitored Segment",
                         "target": "Broadcast / Multicast / Unicast",
                         "observed_value": f"{pps} PPS",
+                        "observed_metric": f"{pps} PPS",
                         "threshold": f"{self.packet_rate_threshold} PPS",
+                        "configured_threshold": f"{self.packet_rate_threshold} PPS",
                         "time_window": "1.0s interval bucket",
                         "explanation": (
                             f"Measured packet arrival rate of {pps} packets/sec exceeded baseline threshold of {self.packet_rate_threshold} PPS. "
@@ -226,7 +232,9 @@ class AnomalyDetector:
                         "host": "Monitored Link",
                         "target": "Aggregate Traffic",
                         "observed_value": f"{kbps} kbps",
+                        "observed_metric": f"{kbps} kbps",
                         "threshold": f"{threshold_kbps} kbps (Byte threshold: {self.byte_rate_threshold} B/s)",
+                        "configured_threshold": f"{threshold_kbps} kbps",
                         "time_window": "1.0s interval bucket",
                         "explanation": (
                             f"Observed link throughput reached {kbps} kbps, exceeding the configured baseline of {threshold_kbps} kbps."
@@ -257,7 +265,9 @@ class AnomalyDetector:
                             "host": src_ip,
                             "target": "Session Endpoints",
                             "observed_value": f"{pct}% of total traffic ({src_pkts}/{total_packets} pkts)",
+                            "observed_metric": f"{pct}% of total traffic ({src_pkts}/{total_packets} pkts)",
                             "threshold": f"> {round(self.host_volume_ratio * 100, 1)}%",
+                            "configured_threshold": f"> {round(self.host_volume_ratio * 100, 1)}%",
                             "time_window": "Full Capture Session",
                             "explanation": (
                                 f"Host {src_ip} accounts for {pct}% of all recorded packets in this capture. "

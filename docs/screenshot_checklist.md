@@ -8,14 +8,13 @@ This checklist documents the graphical visual evidence generated for project sub
 
 | Screenshot ID | Target View | File Path | Status | Verification Note |
 |---|---|---|---|---|
-| **SS-01** | Full Dashboard Overview | `docs/screenshots/dashboard_overview.png` | **Captured (Real)** | High-res 1600x1200 headless capture showing summary cards, Plotly charts, alerts, and packet grid |
-| **SS-02** | Protocol Distribution Donut | `docs/screenshots/protocol_distribution.png` | Documented / In-Dashboard | Rendered via Plotly.js inside `dashboard_overview.png` |
-| **SS-03** | Traffic Timeline (PPS / Kbps)| `docs/screenshots/traffic_timeline.png` | Documented / In-Dashboard | Shows chronological burst trends |
-| **SS-04** | Top Talkers & Flows | `docs/screenshots/top_talkers_flows.png` | Documented / In-Dashboard | Displays endpoint host ranking and canonical 5-tuples |
-| **SS-05** | Security Alerts Panel | `docs/screenshots/security_alerts.png` | Documented / In-Dashboard | Highlights SYN Flood (`HIGH`) and Port Scan (`MEDIUM`) alerts |
-| **SS-06** | Packet Explorer Grid | `docs/screenshots/packet_explorer.png` | Documented / In-Dashboard | Shows paginated table, protocol badges, and search bar |
-| **SS-07** | Automated Test Output | `docs/test_report.md` | Terminal Output Verified | 34 passed tests in 0.40 seconds |
-| **SS-08** | Wireshark Side-by-Side | `docs/wireshark_verification.md` | Procedure Ready | Outstanding on current machine (Wireshark not installed) |
+| **SS-01** | NetScope 2.0 Dark Theme Dashboard | `docs/screenshots/dashboard_dark.png` | **Captured (Real)** | High-res 1560x1100 headless Chrome capture showing dark theme, summary cards, Plotly charts, alerts, and packet grid |
+| **SS-02** | NetScope 2.0 Light Theme Dashboard | `docs/screenshots/dashboard_light.png` | **Captured (Real)** | High-res 1560x1100 headless Chrome capture showing light theme with WCAG AA contrast and adaptive charts |
+| **SS-03** | Packet Inspector Modal | `docs/screenshots/packet_inspector_modal.png` | **Captured (Real)** | Real capture showing multi-layer protocol breakdown, TCP flags, and hex payload viewer |
+| **SS-04** | Security Alerts & Anomaly Details | `docs/screenshots/security_alerts.png` | **Captured (Real)** | Real capture showing anomaly cards with exact observed values, thresholds, sliding windows, and packet references |
+| **SS-05** | Legacy Dashboard Overview | `docs/screenshots/dashboard_overview.png` | Captured (Archive) | Initial version 1.0 baseline capture |
+| **SS-06** | Automated Test Output | `docs/test_report.md` | Terminal Output Verified | 43 passed tests in 2.21 seconds |
+| **SS-07** | Wireshark Side-by-Side | `docs/wireshark_verification.md` | Procedure Ready | Dual-verification procedure documenting Scapy vs Wireshark metrics |
 
 ---
 
