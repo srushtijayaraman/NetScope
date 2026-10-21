@@ -19,6 +19,8 @@ from analyzer.parser import parse_packet
 from analyzer.flow_tracker import FlowTracker
 from analytics.statistics import TrafficAnalytics
 from analytics.anomaly_detector import AnomalyDetector
+from analytics.capture_comparator import compare_captures, analyze_standalone_pcap
+from analytics.report_generator import generate_html_report
 from storage.database import DatabaseManager
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
@@ -363,6 +365,16 @@ def get_flow_detail(flow_id: str):
         return jsonify(flow)
 
 
+@api_bp.route("/flows/<flow_id>/timeline", methods=["GET"])
+def get_flow_timeline(flow_id: str):
+    """Returns chronological conversation progression events for a TCP/transport flow."""
+    with session_lock:
+        timeline_data = active_session["flow_tracker"].get_flow_timeline(flow_id)
+        if not timeline_data:
+            return jsonify({"error": f"Flow '{flow_id}' not found."}), 404
+        return jsonify(timeline_data)
+
+
 @api_bp.route("/alerts/config", methods=["GET", "POST"])
 def alert_config():
     """Inspects or updates heuristic anomaly detection thresholds."""
@@ -488,14 +500,6 @@ def get_packets():
         "packets": slim_packets,
     })
 
-    return jsonify({
-        "total": total_count,
-        "page": page,
-        "limit": limit,
-        "pages": total_pages,
-        "packets": slim_packets,
-    })
-
 
 @api_bp.route("/packets/<int:packet_id>", methods=["GET"])
 def get_packet_details(packet_id: int):
@@ -599,3 +603,124 @@ def export_csv():
         mimetype="text/csv",
         headers={"Content-Disposition": f"attachment; filename={filename}"},
     )
+
+
+@api_bp.route("/export/report", methods=["GET"])
+def export_report():
+    """Generates a standalone, print-ready HTML analysis report for the active session."""
+    with session_lock:
+        if active_session["analytics"].total_packets == 0:
+            return jsonify({"error": "No capture session active. Please load or upload a PCAP first."}), 400
+
+        summary = active_session["analytics"].get_summary()
+        summary["active_flows"] = active_session["flow_tracker"].get_flow_count()
+        protocols = active_session["analytics"].get_protocol_distribution()
+        top_talkers = active_session["analytics"].get_top_talkers()
+        top_flows = active_session["flow_tracker"].get_top_flows(limit=10)
+        alerts = get_detector().get_all_alerts()
+        filename = active_session["filename"] or "capture.pcap"
+        capture_id = active_session["capture_id"] or "default"
+
+    html_content = generate_html_report(
+        summary=summary,
+        protocols=protocols,
+        top_talkers=top_talkers,
+        top_flows=top_flows,
+        alerts=alerts,
+        filename=filename,
+        capture_id=capture_id,
+    )
+
+    download = request.args.get("download", "0") == "1"
+    disposition = "attachment" if download else "inline"
+    report_filename = f"netscope_report_{os.path.splitext(filename)[0]}_{int(time.time())}.html"
+
+    return Response(
+        html_content,
+        mimetype="text/html",
+        headers={"Content-Disposition": f"{disposition}; filename={report_filename}"},
+    )
+
+
+@api_bp.route("/captures/compare", methods=["POST"])
+def compare_capture_files():
+    """
+    Compares two PCAP files or compares an uploaded PCAP with the currently active session.
+    Supported request formats:
+      1. 'file_a' and 'file_b' multipart uploads
+      2. 'file' multipart upload compared against active session (Capture A)
+      3. 'compare_sample': 'true' compares active session against data/sample_traffic.pcap
+    """
+    upload_dir = current_app.config.get("UPLOAD_FOLDER", "data/uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    file_a = request.files.get("file_a") if request.files else None
+    file_b = (request.files.get("file_b") or request.files.get("file")) if request.files else None
+    json_body = request.get_json(silent=True) or {}
+    compare_with_sample = (
+        (request.form.get("compare_sample", "").lower() in ("true", "1"))
+        or (json_body.get("compare_sample") is True)
+        or (str(json_body.get("compare_sample", "")).lower() in ("true", "1"))
+    )
+
+    saved_paths = []
+    try:
+        # Resolve Capture A
+        if file_a and file_a.filename:
+            fn_a = secure_filename(file_a.filename)
+            path_a = os.path.join(upload_dir, f"cmp_a_{uuid.uuid4().hex[:8]}_{fn_a}")
+            file_a.save(path_a)
+            saved_paths.append(path_a)
+            data_a = analyze_standalone_pcap(path_a, capture_id="cmp-a")
+            label_a = fn_a
+        else:
+            # Fall back to active session
+            with session_lock:
+                if active_session["analytics"].total_packets == 0:
+                    return jsonify({"error": "No active capture to compare against. Please upload both files or load an active capture."}), 400
+                summary_a = active_session["analytics"].get_summary()
+                summary_a["active_flows"] = active_session["flow_tracker"].get_flow_count()
+                summary_a["filename"] = active_session["filename"] or "Active Session"
+                summary_a["file_size_bytes"] = 0
+                data_a = {
+                    "summary": summary_a,
+                    "protocols": active_session["analytics"].get_protocol_distribution(),
+                    "top_talkers": active_session["analytics"].get_top_talkers(),
+                    "flows_count": active_session["flow_tracker"].get_flow_count(),
+                    "top_flows": active_session["flow_tracker"].get_top_flows(limit=5),
+                    "alerts": get_detector().get_all_alerts(),
+                }
+                label_a = summary_a["filename"]
+
+        # Resolve Capture B
+        if file_b and file_b.filename:
+            fn_b = secure_filename(file_b.filename)
+            path_b = os.path.join(upload_dir, f"cmp_b_{uuid.uuid4().hex[:8]}_{fn_b}")
+            file_b.save(path_b)
+            saved_paths.append(path_b)
+            data_b = analyze_standalone_pcap(path_b, capture_id="cmp-b")
+            label_b = fn_b
+        elif compare_with_sample:
+            sample_path = "data/sample_traffic.pcap"
+            if not os.path.exists(sample_path):
+                return jsonify({"error": "Sample PCAP fixture not found on server."}), 404
+            data_b = analyze_standalone_pcap(sample_path, capture_id="cmp-sample")
+            label_b = "sample_traffic.pcap (Baseline)"
+        else:
+            return jsonify({"error": "Please provide a second PCAP file ('file_b' or 'file') to compare against."}), 400
+
+        # Run comparison
+        result = compare_captures(data_a, data_b, label_a=label_a, label_b=label_b)
+        return jsonify(result)
+
+    except PcapReaderError as pe:
+        return jsonify({"error": f"PCAP parsing failed: {str(pe)}"}), 400
+    except Exception as exc:
+        return jsonify({"error": f"Comparison failed: {str(exc)}"}), 500
+    finally:
+        for p in saved_paths:
+            if os.path.exists(p):
+                try:
+                    os.remove(p)
+                except Exception:
+                    pass

@@ -14,6 +14,8 @@ class FlowTracker:
         self.flows = {}
         # Maps flow_id -> flow metadata dict for O(1) direct lookup
         self.flows_by_id = {}
+        # Maps canonical flow key -> set of observed (is_forward, seq, length) tuples
+        self.flow_segments = defaultdict(set)
 
     def _canonical_key(self, src_ip: str, dst_ip: str, proto: str, sport: int, dport: int):
         """Builds a symmetric canonical key so packets in both directions map to the same flow."""
@@ -60,7 +62,15 @@ class FlowTracker:
                 "total_packets": 0,
                 "total_bytes": 0,
                 "tcp_state": "INIT" if proto == "TCP" else "STATELESS",
+                "handshake_status": "Pending" if proto == "TCP" else "Not Applicable",
+                "retransmissions_count": 0,
                 "packet_ids": [],
+                "timeline": [],
+                "_saw_syn": False,
+                "_saw_syn_ack": False,
+                "_saw_handshake_ack": False,
+                "_saw_fin": False,
+                "_saw_rst": False,
             }
             self.flows[key] = flow_obj
             self.flows_by_id[flow_obj["flow_id"]] = flow_obj
@@ -85,25 +95,101 @@ class FlowTracker:
             flow["reverse_packets"] += 1
             flow["reverse_bytes"] += pkt_len
 
-        # TCP State tracking
+        # TCP analysis: flags, states, retransmissions, timeline events
+        flags = record.get("tcp_flags", [])
+        is_retrans = False
+        event_type = "DATA"
+
         if proto == "TCP":
-            flags = record.get("tcp_flags", [])
+            seq = record.get("tcp_seq")
+            ack = record.get("tcp_ack")
+
+            # Event classification
             if "RST" in flags:
-                flow["tcp_state"] = "RESET"
+                event_type = "RST"
+                flow["_saw_rst"] = True
             elif "FIN" in flags:
-                flow["tcp_state"] = "CLOSING" if flow["tcp_state"] == "ESTABLISHED" else "CLOSED"
+                event_type = "FIN"
+                flow["_saw_fin"] = True
             elif "SYN" in flags and "ACK" in flags:
-                flow["tcp_state"] = "SYN_ACK"
+                event_type = "SYN-ACK"
+                flow["_saw_syn_ack"] = True
             elif "SYN" in flags:
-                flow["tcp_state"] = "SYN_SENT"
-            elif "ACK" in flags and flow["tcp_state"] in ("SYN_ACK", "SYN_SENT"):
+                event_type = "SYN"
+                flow["_saw_syn"] = True
+            elif "PSH" in flags or (pkt_len > 54 and "ACK" in flags):
+                event_type = "APPLICATION_DATA"
+            elif flags == ["ACK"]:
+                event_type = "ACK"
+                if flow["_saw_syn_ack"] and not flow["_saw_handshake_ack"] and is_forward:
+                    flow["_saw_handshake_ack"] = True
+            else:
+                event_type = ",".join(flags) if flags else "TCP_SEGMENT"
+
+            # Retransmission check (only for segments with payload or SYN/FIN)
+            if seq is not None and ("SYN" in flags or "FIN" in flags or pkt_len > 54):
+                seg_key = (is_forward, seq, pkt_len)
+                if seg_key in self.flow_segments[key]:
+                    is_retrans = True
+                    flow["retransmissions_count"] += 1
+                else:
+                    self.flow_segments[key].add(seg_key)
+
+            # Update TCP state and handshake status
+            if flow["_saw_rst"]:
+                flow["tcp_state"] = "RESET"
+            elif flow["_saw_fin"]:
+                flow["tcp_state"] = "CLOSING" if flow["_saw_handshake_ack"] or flow["tcp_state"] == "ESTABLISHED" else "CLOSED"
+            elif flow["_saw_syn"] and flow["_saw_syn_ack"] and flow["_saw_handshake_ack"]:
                 flow["tcp_state"] = "ESTABLISHED"
+            elif flow["_saw_syn_ack"]:
+                flow["tcp_state"] = "SYN_ACK"
+            elif flow["_saw_syn"]:
+                flow["tcp_state"] = "SYN_SENT"
+            elif not flow["_saw_syn"] and not flow["_saw_syn_ack"]:
+                flow["tcp_state"] = "MID_STREAM"
+            else:
+                flow["tcp_state"] = "ESTABLISHED"
+
+            # Handshake categorization
+            if flow["_saw_syn"] and flow["_saw_syn_ack"] and flow["_saw_handshake_ack"]:
+                flow["handshake_status"] = "Complete (3-Way Handshake)"
+            elif flow["_saw_syn"] and not flow["_saw_syn_ack"]:
+                flow["handshake_status"] = "Incomplete (SYN Sent Only)"
+            elif flow["_saw_syn_ack"] and not flow["_saw_syn"]:
+                flow["handshake_status"] = "Incomplete (SYN-ACK without initial SYN)"
+            elif not flow["_saw_syn"] and not flow["_saw_syn_ack"]:
+                flow["handshake_status"] = "Mid-Stream Capture (No Handshake Observed)"
+        else:
+            event_type = proto
+            flow["handshake_status"] = "Not Applicable (Stateless Protocol)"
+
+        # Append timeline event (bounded to 500 events per flow)
+        if len(flow["timeline"]) < 500:
+            flow["timeline"].append({
+                "packet_id": pkt_id,
+                "timestamp": ts,
+                "relative_time_sec": round(ts - flow["start_time"], 4),
+                "direction": "A -> B" if is_forward else "B -> A",
+                "source": f"{src_ip}:{sport}" if sport else src_ip,
+                "destination": f"{dst_ip}:{dport}" if dport else dst_ip,
+                "event_type": event_type,
+                "flags": flags,
+                "tcp_seq": record.get("tcp_seq"),
+                "tcp_ack": record.get("tcp_ack"),
+                "packet_length": pkt_len,
+                "is_retransmission": is_retrans,
+                "summary": record.get("summary", ""),
+            })
 
     def get_flow_count(self) -> int:
         return len(self.flows)
 
     def get_flow_by_id(self, flow_id: str) -> dict | None:
-        return self.flows_by_id.get(flow_id)
+        flow = self.flows_by_id.get(flow_id)
+        if not flow:
+            return None
+        return {k: v for k, v in flow.items() if not k.startswith("_")}
 
     def get_top_flows(self, limit: int = 10, sort_by: str = "bytes") -> list[dict]:
         """Returns sorted flow summaries without exposing unbounded packet ID arrays."""
@@ -127,10 +213,39 @@ class FlowTracker:
                 "total_packets": f["total_packets"],
                 "total_bytes": f["total_bytes"],
                 "tcp_state": f["tcp_state"],
+                "handshake_status": f.get("handshake_status", "Not Applicable"),
+                "retransmissions": f.get("retransmissions_count", 0),
                 "packet_count": len(f["packet_ids"]),
             })
         return results
 
+    def get_flow_timeline(self, flow_id: str) -> dict | None:
+        """Returns chronological TCP/transport conversation timeline events for a flow."""
+        flow = self.flows_by_id.get(flow_id)
+        if not flow:
+            return None
+
+        return {
+            "flow_id": flow["flow_id"],
+            "endpoint_a": flow["endpoint_a"],
+            "endpoint_b": flow["endpoint_b"],
+            "transport_protocol": flow["transport_protocol"],
+            "application_protocol": flow["application_protocol"],
+            "tcp_state": flow["tcp_state"],
+            "handshake_status": flow.get("handshake_status", "Not Applicable"),
+            "retransmissions": flow.get("retransmissions_count", 0),
+            "start_time": flow["start_time"],
+            "end_time": flow["end_time"],
+            "duration": flow["duration"],
+            "forward_packets": flow["forward_packets"],
+            "reverse_packets": flow["reverse_packets"],
+            "total_packets": flow["total_packets"],
+            "total_bytes": flow["total_bytes"],
+            "events_count": len(flow.get("timeline", [])),
+            "timeline": flow.get("timeline", []),
+        }
+
     def reset(self):
         self.flows.clear()
         self.flows_by_id.clear()
+        self.flow_segments.clear()

@@ -4,11 +4,11 @@
 - **Execution Date**: 2026-10-21
 - **Platform**: Windows 11 (NT 10.0.26300.0), Python 3.13.2 (64-bit)
 - **Test Framework**: `pytest-9.1.1`, `pluggy-1.7.0`
-- **Total Tests Discovered**: 43
-- **Tests Passed**: 43 (100.0%)
+- **Total Tests Discovered**: 55
+- **Tests Passed**: 55 (100.0%)
 - **Tests Failed**: 0
 - **Tests Skipped**: 0
-- **Total Execution Time**: 2.21 seconds
+- **Total Execution Time**: 3.03 seconds
 
 ---
 
@@ -85,6 +85,30 @@
 | TC-STAT-04 | `test_top_talkers_and_ports` | **PASSED** | Correctly ranks talkers by volume and packet count |
 | TC-STAT-05 | `test_timeline_bucketing` | **PASSED** | Aggregates packets into 1-second chronological buckets |
 
+### H. TCP Conversation Analysis (`tests/test_conversation_inspector.py`)
+| Test ID | Test Name | Status | Verified Outcome |
+|---|---|---|---|
+| TC-CONV-01 | `test_complete_tcp_handshake_and_teardown` | **PASSED** | Verifies 3-way handshake state (`SYN_SENT` &rarr; `SYN_ACK` &rarr; `ESTABLISHED`), DATA, and FIN closing |
+| TC-CONV-02 | `test_retransmission_detection` | **PASSED** | Detects repeated sequence numbers with identical payload lengths, flagging `is_retransmission: True` |
+| TC-CONV-03 | `test_midstream_and_incomplete_handshakes` | **PASSED** | Correctly classifies mid-stream traffic as `MID_STREAM` and connection aborts as `RESET` |
+| TC-CONV-04 | `test_timeline_api_endpoint` | **PASSED** | Verifies `/api/flows/<flow_id>/timeline` returns chronological event ladder and 404 on missing flows |
+
+### I. Capture Comparison (`tests/test_comparator.py`)
+| Test ID | Test Name | Status | Verified Outcome |
+|---|---|---|---|
+| TC-COMP-01 | `test_compute_metric_diff_zero_guard` | **PASSED** | Prevents division-by-zero crashes when baseline metrics are 0 |
+| TC-COMP-02 | `test_standalone_pcap_analysis` | **PASSED** | Parses capture files in an isolated sandbox without mutating active global session state |
+| TC-COMP-03 | `test_compare_identical_captures` | **PASSED** | Confirms 0% difference and clean equality across identical capture files |
+| TC-COMP-04 | `test_disparate_duration_warning` | **PASSED** | Automatically emits methodological warning banner when observation windows differ significantly |
+| TC-COMP-05 | `test_compare_api_endpoint` | **PASSED** | Validates `/api/captures/compare` with sample comparison and input validation |
+
+### J. HTML Report Generation (`tests/test_report_generator.py`)
+| Test ID | Test Name | Status | Verified Outcome |
+|---|---|---|---|
+| TC-REP-01 | `test_html_report_generation_structure` | **PASSED** | Verifies standalone HTML document contains verified KPIs, protocol tables, flows, and alerts |
+| TC-REP-02 | `test_html_report_xss_escaping` | **PASSED** | Asserts that hostile filenames and payload injection strings are strictly sanitized via `html.escape` |
+| TC-REP-03 | `test_report_api_endpoint` | **PASSED** | Tests `/api/export/report` returns HTTP 200 `text/html` and HTTP 400 guard on empty captures |
+
 ---
 
 ## 3. Defects Discovered & Remediations Applied
@@ -101,4 +125,10 @@
 6. **Active Flow Count Inconsistency**: The top KPI card displayed total active 5-tuple flows (52), while the flows card fetched top talkers with a hard-coded limit of 8, causing user confusion.
    - *Remediation*: Created dedicated `/api/flows?limit=...` endpoint returning `total_flows` alongside paginated/filtered flows, and labeled the card dynamically: `Showing Top 10 of 52 Flows`.
 7. **Single-Theme Limitation & Visual Ergonomics**: Previous dashboard supported dark mode only and suffered from nested scrollbars, unstyled default browser controls, and poor contrast in bright lab lighting.
-   - *Remediation*: Implemented NetScope 2.0 Design System with complete Light and Dark theme tokens, zero-flash startup script, local storage persistence, live Plotly chart relayout without data reloading, and full keyboard accessibility.
+   - *Remediation*: Implemented NetScope Design System with complete Light and Dark theme tokens, zero-flash startup script, local storage persistence, live Plotly chart relayout without data reloading, and full keyboard accessibility.
+8. **Duplicate Endpoint Return Statement**: `get_packets()` contained a redundant second `return jsonify(...)` block.
+   - *Remediation*: Cleaned up dead return statement.
+9. **Set Serialization Exception in Flow Objects**: Attempting to serialize `flow_obj` directly raised `TypeError: Object of type set is not JSON serializable` due to `_seen_segments`.
+   - *Remediation*: Moved `_seen_segments` into an external `self.flow_segments` mapping and sanitized `get_flow_by_id` to exclude private attributes.
+10. **Syntax Warning on Python 3.13 Escape Sequences**: HTML report template contained LaTeX-style math backslashes causing `SyntaxWarning: invalid escape sequence`.
+    - *Remediation*: Replaced with standard text notation `(t_max - t_min)` and `(total_bytes * 8) / duration`.

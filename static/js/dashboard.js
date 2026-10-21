@@ -115,6 +115,36 @@ document.addEventListener("DOMContentLoaded", () => {
         cfgByteRate: document.getElementById("cfg-byte-rate"),
         cfgHostRatio: document.getElementById("cfg-host-ratio"),
         cfgCooldown: document.getElementById("cfg-cooldown"),
+
+        // NetScope 3.0: Compare & Report Elements
+        btnOpenCompare: document.getElementById("btn-open-compare"),
+        btnDownloadReport: document.getElementById("btn-download-report"),
+
+        // TCP Conversation Modal
+        modalFlowTimeline: document.getElementById("modal-tcp-conversation"),
+        btnCloseFlowTimeline: document.getElementById("btn-close-flow-timeline"),
+        flowTimelineTbody: document.getElementById("flow-timeline-tbody"),
+        modalFlowTitle: document.getElementById("modal-flow-title"),
+        modalFlowSubtitle: document.getElementById("modal-flow-subtitle"),
+        flowChipHandshake: document.getElementById("flow-chip-handshake"),
+        flowChipState: document.getElementById("flow-chip-state"),
+        flowChipRetrans: document.getElementById("flow-chip-retrans"),
+        flowChipVolume: document.getElementById("flow-chip-volume"),
+        flowChipDuration: document.getElementById("flow-chip-duration"),
+        btnFlowFilterExplorer: document.getElementById("btn-flow-filter-explorer"),
+
+        // Compare Modal
+        modalCompare: document.getElementById("modal-compare"),
+        btnCloseCompare: document.getElementById("btn-close-compare"),
+        btnCompareWithSample: document.getElementById("btn-compare-with-sample"),
+        compareFileInput: document.getElementById("compare-file-input"),
+        compareWarningBanner: document.getElementById("compare-warning-banner"),
+        compareResults: document.getElementById("compare-results"),
+        comparePlaceholder: document.getElementById("compare-placeholder"),
+        cmpNameA: document.getElementById("cmp-name-a"),
+        cmpNameB: document.getElementById("cmp-name-b"),
+        compareMetricsTbody: document.getElementById("compare-metrics-tbody"),
+        compareProtocolsTbody: document.getElementById("compare-protocols-tbody"),
     };
 
     // Helper: Format Bytes
@@ -369,15 +399,31 @@ document.addEventListener("DOMContentLoaded", () => {
                     const tr = document.createElement("tr");
                     tr.innerHTML = `
                         <td class="mono"><strong>${f.flow_id}</strong></td>
-                        <td class="mono">${f.endpoint_a} &harr; ${f.endpoint_b}</td>
+                        <td class="mono" style="font-size:11.5px;">${f.endpoint_a} &harr; ${f.endpoint_b}</td>
                         <td><span class="badge badge-proto badge-proto-tcp">${f.transport_protocol}</span></td>
                         <td class="mono">${(f.duration || 0).toFixed(2)}s</td>
                         <td class="mono">${f.total_packets}</td>
                         <td class="mono">${formatBytes(f.total_bytes)}</td>
-                        <td><span class="badge">${f.tcp_state || 'STATELESS'}</span></td>
-                        <td><button class="btn btn-outline btn-xs btn-filter-flow" data-flow-id="${f.flow_id}">Filter Flow</button></td>
+                        <td>
+                            <span class="badge">${f.tcp_state || 'STATELESS'}</span>
+                            ${f.retransmissions ? `<span class="badge-retrans" title="${f.retransmissions} retransmission(s)">${f.retransmissions} Retrans</span>` : ''}
+                        </td>
+                        <td>
+                            <div style="display:inline-flex; gap:4px;">
+                                <button class="btn btn-primary btn-xs btn-inspect-flow" data-flow-id="${f.flow_id}" title="Inspect TCP Handshake & Conversation Progression">Inspect</button>
+                                <button class="btn btn-outline btn-xs btn-filter-flow" data-flow-id="${f.flow_id}" title="Filter Explorer to this Flow">Filter</button>
+                            </div>
+                        </td>
                     `;
                     elements.flowsTbody.appendChild(tr);
+                });
+
+                // Attach flow inspect clicks
+                elements.flowsTbody.querySelectorAll(".btn-inspect-flow").forEach(btn => {
+                    btn.addEventListener("click", (e) => {
+                        const flowId = e.target.dataset.flowId;
+                        openFlowTimeline(flowId);
+                    });
                 });
 
                 // Attach flow filter clicks
@@ -1114,6 +1160,243 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // ==========================================================================
+    // NetScope 3.0: TCP Conversation Timeline
+    // ==========================================================================
+    async function openFlowTimeline(flowId) {
+        if (!elements.modalFlowTimeline) return;
+        elements.modalFlowTitle.textContent = `TCP Conversation Inspector — ${flowId}`;
+        elements.modalFlowSubtitle.textContent = "Loading conversation events...";
+        elements.flowTimelineTbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">Fetching flow timeline...</td></tr>';
+        elements.modalFlowTimeline.style.display = "flex";
+
+        try {
+            const res = await fetch(`/api/flows/${flowId}/timeline`);
+            if (!res.ok) {
+                elements.flowTimelineTbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Failed to load timeline for ${flowId}.</td></tr>`;
+                return;
+            }
+            const data = await res.json();
+            elements.modalFlowSubtitle.textContent = `${data.endpoint_a} ↔ ${data.endpoint_b} | ${data.transport_protocol} (${data.application_protocol || 'Unclassified'})`;
+
+            elements.flowChipHandshake.textContent = data.handshake_status || "Not Applicable";
+            elements.flowChipState.textContent = data.tcp_state || "STATELESS";
+            elements.flowChipRetrans.textContent = `${data.retransmissions || 0} Retransmissions`;
+            elements.flowChipVolume.textContent = `${data.total_packets} pkts (${formatBytes(data.total_bytes)})`;
+            elements.flowChipDuration.textContent = `${(data.duration || 0).toFixed(3)}s`;
+
+            if (elements.btnFlowFilterExplorer) {
+                elements.btnFlowFilterExplorer.onclick = () => {
+                    elements.modalFlowTimeline.style.display = "none";
+                    applyFlowFilter(data.flow_id);
+                };
+            }
+
+            const events = data.timeline || [];
+            if (events.length === 0) {
+                elements.flowTimelineTbody.innerHTML = '<tr><td colspan="7" class="text-center text-muted">No chronological events recorded for this conversation.</td></tr>';
+            } else {
+                elements.flowTimelineTbody.innerHTML = "";
+                events.forEach(evt => {
+                    const tr = document.createElement("tr");
+                    const isFwd = evt.direction.includes("A -> B");
+                    const dirClass = isFwd ? "dir-ab" : "dir-ba";
+                    const dirIcon = isFwd ? "→" : "←";
+                    
+                    let eventBadgeClass = "event-ack";
+                    const et = (evt.event_type || "").toUpperCase();
+                    if (et === "SYN") eventBadgeClass = "event-syn";
+                    else if (et === "SYN-ACK") eventBadgeClass = "event-syn-ack";
+                    else if (et.includes("DATA")) eventBadgeClass = "event-data";
+                    else if (et === "FIN") eventBadgeClass = "event-fin";
+                    else if (et === "RST") eventBadgeClass = "event-rst";
+
+                    tr.innerHTML = `
+                        <td class="mono" style="font-size:11px;">+${(evt.relative_time_sec || 0).toFixed(4)}s</td>
+                        <td><span class="dir-indicator ${dirClass}">${dirIcon} ${evt.direction}</span></td>
+                        <td>
+                            <span class="event-badge ${eventBadgeClass}">${evt.event_type}</span>
+                            ${evt.is_retransmission ? '<span class="badge-retrans">RETRANS</span>' : ''}
+                        </td>
+                        <td class="mono" style="font-size:11px;">${evt.tcp_seq !== null && evt.tcp_seq !== undefined ? evt.tcp_seq : '-'}</td>
+                        <td class="mono" style="font-size:11px;">${evt.tcp_ack !== null && evt.tcp_ack !== undefined ? evt.tcp_ack : '-'}</td>
+                        <td class="mono" style="font-size:11px;">${evt.packet_length || 0} B</td>
+                        <td>
+                            <button class="btn btn-outline btn-xs btn-inspect-frame" data-pkt-id="${evt.packet_id}">#${evt.packet_id}</button>
+                        </td>
+                    `;
+                    elements.flowTimelineTbody.appendChild(tr);
+                });
+
+                // Attach frame click listeners
+                elements.flowTimelineTbody.querySelectorAll(".btn-inspect-frame").forEach(btn => {
+                    btn.addEventListener("click", (e) => {
+                        const pid = parseInt(e.target.dataset.pktId);
+                        inspectPacket(pid);
+                    });
+                });
+            }
+        } catch (err) {
+            console.error("Flow timeline error:", err);
+            elements.flowTimelineTbody.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Error: ${err.message}</td></tr>`;
+        }
+    }
+
+    if (elements.btnCloseFlowTimeline) {
+        elements.btnCloseFlowTimeline.addEventListener("click", () => {
+            elements.modalFlowTimeline.style.display = "none";
+        });
+    }
+
+    // ==========================================================================
+    // NetScope 3.0: Capture Comparison
+    // ==========================================================================
+    function openCompareModal() {
+        if (!elements.modalCompare) return;
+        elements.modalCompare.style.display = "flex";
+    }
+
+    async function runCaptureComparison(formData) {
+        showLoading("Executing differential comparative analysis...");
+        try {
+            const res = await fetch("/api/captures/compare", {
+                method: "POST",
+                body: formData,
+            });
+            const data = await res.json();
+            hideLoading();
+
+            if (!res.ok) {
+                showNotification(data.error || "Capture comparison failed.", "error");
+                return;
+            }
+
+            renderComparisonResults(data);
+        } catch (err) {
+            hideLoading();
+            showNotification(`Comparison failed: ${err.message}`, "error");
+        }
+    }
+
+    function renderComparisonResults(data) {
+        elements.comparePlaceholder.style.display = "none";
+        elements.compareResults.style.display = "block";
+
+        elements.cmpNameA.textContent = data.capture_a.filename;
+        elements.cmpNameB.textContent = data.capture_b.filename;
+
+        if (data.duration_warning) {
+            elements.compareWarningBanner.textContent = data.duration_warning;
+            elements.compareWarningBanner.style.display = "block";
+        } else {
+            elements.compareWarningBanner.style.display = "none";
+        }
+
+        const m = data.metrics || {};
+        const metricLabels = {
+            total_packets: "Total Ingested Frames",
+            total_bytes: "Captured Volume (Bytes)",
+            capture_duration_seconds: "Capture Duration (Seconds)",
+            capture_pps: "Packet Arrival Rate (PPS)",
+            throughput_kbps: "Average Throughput (kbps)",
+            average_packet_size_bytes: "Average Frame Size (Bytes)",
+            unique_hosts: "Unique Host Endpoints",
+            active_flows: "Canonical 5-Tuple Flows",
+            alerts_count: "Heuristic Anomaly Alerts",
+            processing_pps: "Engine Processing Speed (PPS)",
+        };
+
+        elements.compareMetricsTbody.innerHTML = "";
+        for (const [key, label] of Object.entries(metricLabels)) {
+            const item = m[key];
+            if (!item) continue;
+
+            const tr = document.createElement("tr");
+            const pct = item.pct_change || 0;
+            let pillClass = "delta-zero";
+            let sign = "";
+            if (pct > 0) { pillClass = "delta-positive"; sign = "+"; }
+            else if (pct < 0) { pillClass = "delta-negative"; }
+
+            tr.innerHTML = `
+                <td><strong>${label}</strong></td>
+                <td class="mono">${typeof item.val_a === 'number' ? item.val_a.toLocaleString() : item.val_a}</td>
+                <td class="mono">${typeof item.val_b === 'number' ? item.val_b.toLocaleString() : item.val_b}</td>
+                <td class="mono">${item.diff > 0 ? '+' : ''}${typeof item.diff === 'number' ? item.diff.toLocaleString() : item.diff}</td>
+                <td><span class="delta-pill ${pillClass}">${sign}${pct.toFixed(1)}%</span></td>
+            `;
+            elements.compareMetricsTbody.appendChild(tr);
+        }
+
+        const protoShifts = data.protocol_shifts?.transport || [];
+        elements.compareProtocolsTbody.innerHTML = "";
+        if (protoShifts.length === 0) {
+            elements.compareProtocolsTbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">No protocol differences recorded.</td></tr>';
+        } else {
+            protoShifts.forEach(ps => {
+                const tr = document.createElement("tr");
+                const diff = ps.pct_diff || 0;
+                let pillClass = "delta-zero";
+                let sign = "";
+                if (diff > 0) { pillClass = "delta-positive"; sign = "+"; }
+                else if (diff < 0) { pillClass = "delta-negative"; }
+
+                tr.innerHTML = `
+                    <td><strong>${ps.protocol}</strong></td>
+                    <td class="mono">${ps.pct_a.toFixed(1)}% (${ps.count_a} pkts)</td>
+                    <td class="mono">${ps.pct_b.toFixed(1)}% (${ps.count_b} pkts)</td>
+                    <td><span class="delta-pill ${pillClass}">${sign}${diff.toFixed(1)}% shift</span></td>
+                `;
+                elements.compareProtocolsTbody.appendChild(tr);
+            });
+        }
+    }
+
+    if (elements.btnOpenCompare) {
+        elements.btnOpenCompare.addEventListener("click", openCompareModal);
+    }
+    if (elements.btnCloseCompare) {
+        elements.btnCloseCompare.addEventListener("click", () => {
+            elements.modalCompare.style.display = "none";
+        });
+    }
+    if (elements.btnCompareWithSample) {
+        elements.btnCompareWithSample.addEventListener("click", () => {
+            const fd = new FormData();
+            fd.append("compare_sample", "true");
+            runCaptureComparison(fd);
+        });
+    }
+    if (elements.compareFileInput) {
+        elements.compareFileInput.addEventListener("change", (e) => {
+            const f = e.target.files[0];
+            if (f) {
+                const fd = new FormData();
+                fd.append("file_b", f);
+                runCaptureComparison(fd);
+            }
+        });
+    }
+
+    // ==========================================================================
+    // NetScope 3.0: Report Download
+    // ==========================================================================
+    if (elements.btnDownloadReport) {
+        elements.btnDownloadReport.addEventListener("click", () => {
+            window.open("/api/export/report", "_blank");
+        });
+    }
+
+    // Global Modal Escape Key Listener
+    document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") {
+            if (elements.modalFlowTimeline) elements.modalFlowTimeline.style.display = "none";
+            if (elements.modalCompare) elements.modalCompare.style.display = "none";
+            if (elements.modal) elements.modal.style.display = "none";
+            if (elements.configModal) elements.configModal.style.display = "none";
+        }
+    });
+
+    // ==========================================================================
     // Initialization
     // ==========================================================================
     initTheme();
@@ -1129,6 +1412,21 @@ document.addEventListener("DOMContentLoaded", () => {
     if (inspectPktId) {
         setTimeout(() => {
             inspectPacket(parseInt(inspectPktId));
+        }, 800);
+    }
+    const inspectFlowId = urlParams.get("inspect_flow");
+    if (inspectFlowId) {
+        setTimeout(() => {
+            openFlowTimeline(inspectFlowId);
+        }, 800);
+    }
+    const openCompare = urlParams.get("open_compare");
+    if (openCompare) {
+        setTimeout(async () => {
+            openCompareModal();
+            const fd = new FormData();
+            fd.append("compare_sample", "true");
+            await runCaptureComparison(fd);
         }, 800);
     }
     const scrollToSection = urlParams.get("section");

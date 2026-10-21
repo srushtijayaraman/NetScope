@@ -68,6 +68,28 @@
                 <span>Load Sample PCAP</span>
             </button>
 
+            <!-- Compare Captures Button -->
+            <button class="btn btn-outline btn-sm" id="btn-open-compare" title="Compare two PCAP captures side-by-side">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                    <polyline points="15 3 21 3 21 9"/>
+                    <line x1="10" y1="14" x2="21" y2="3"/>
+                </svg>
+                <span>Compare</span>
+            </button>
+
+            <!-- Download HTML Intelligence Report Button -->
+            <button class="btn btn-outline btn-sm" id="btn-download-report" title="Generate and view self-contained HTML intelligence report">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                    <polyline points="14 2 14 8 20 8"/>
+                    <line x1="16" y1="13" x2="8" y2="13"/>
+                    <line x1="16" y1="17" x2="8" y2="17"/>
+                    <polyline points="10 9 9 9 8 9"/>
+                </svg>
+                <span>Report</span>
+            </button>
+
             <!-- Anomaly Threshold Configuration Button -->
             <button class="btn btn-outline btn-sm" id="btn-open-config" title="Configure Anomaly Detection Heuristic Thresholds">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -451,6 +473,158 @@
                 <div style="margin-top:14px; display:flex; justify-content:flex-end; gap:8px;">
                     <button class="btn btn-outline btn-sm" id="btn-cancel-config">Cancel</button>
                     <button class="btn btn-primary btn-sm" id="btn-save-config">Save Thresholds</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- TCP Conversation Inspector Modal -->
+    <div id="modal-tcp-conversation" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="modal-flow-title">
+        <div class="modal-content" style="max-width: 880px; max-height: 88vh; display:flex; flex-direction:column;">
+            <div class="modal-header">
+                <div>
+                    <h3 id="modal-flow-title">TCP Conversation Inspector</h3>
+                    <p id="modal-flow-subtitle" style="font-size:12px; color:var(--text-secondary); margin-top:2px; font-family:var(--font-mono);"></p>
+                </div>
+                <button class="modal-close" id="btn-close-flow-timeline" aria-label="Close conversation inspector">&times;</button>
+            </div>
+            <div class="modal-body" style="overflow-y:auto; padding:16px 20px;">
+                <!-- Summary Chips -->
+                <div class="flow-scorecard-grid" style="margin-bottom:14px;">
+                    <div class="scorecard-chip">
+                        <span class="chip-label">Handshake Status</span>
+                        <span class="chip-val" id="flow-chip-handshake">Checking...</span>
+                    </div>
+                    <div class="scorecard-chip">
+                        <span class="chip-label">TCP State</span>
+                        <span class="chip-val" id="flow-chip-state">Checking...</span>
+                    </div>
+                    <div class="scorecard-chip">
+                        <span class="chip-label">Retransmissions</span>
+                        <span class="chip-val" id="flow-chip-retrans">0</span>
+                    </div>
+                    <div class="scorecard-chip">
+                        <span class="chip-label">Packets / Volume</span>
+                        <span class="chip-val" id="flow-chip-volume">0 pkts</span>
+                    </div>
+                    <div class="scorecard-chip">
+                        <span class="chip-label">Duration</span>
+                        <span class="chip-val" id="flow-chip-duration">0.00s</span>
+                    </div>
+                </div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-secondary);">Chronological Conversation Progression</h4>
+                    <button class="btn btn-outline btn-xs" id="btn-flow-filter-explorer">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+                        <span>Filter Explorer to this Flow</span>
+                    </button>
+                </div>
+
+                <!-- Timeline / Event Ladder -->
+                <div class="table-viewport" style="max-height: 400px; border:1px solid var(--border-default); border-radius:var(--radius-md);">
+                    <table class="data-table" id="table-flow-timeline">
+                        <thead>
+                            <tr>
+                                <th>Rel Time</th>
+                                <th>Direction</th>
+                                <th>Event / Flags</th>
+                                <th>Sequence #</th>
+                                <th>Ack #</th>
+                                <th>Len</th>
+                                <th>Frame Ref</th>
+                            </tr>
+                        </thead>
+                        <tbody id="flow-timeline-tbody">
+                            <tr><td colspan="7" class="text-center text-muted">Loading conversation events...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Capture Comparison Modal -->
+    <div id="modal-compare" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="modal-compare-title">
+        <div class="modal-content" style="max-width: 960px; max-height: 90vh; display:flex; flex-direction:column;">
+            <div class="modal-header">
+                <div>
+                    <h3 id="modal-compare-title">Capture Comparison &amp; Differential Analysis</h3>
+                    <p style="font-size:12px; color:var(--text-secondary); margin-top:2px;">Compare metrics, throughput variance, and protocol shifts side-by-side</p>
+                </div>
+                <button class="modal-close" id="btn-close-compare" aria-label="Close comparison">&times;</button>
+            </div>
+            <div class="modal-body" style="overflow-y:auto; padding:16px 20px;">
+                <!-- Comparison Controls -->
+                <div style="background:var(--bg-surface-elevated); padding:14px 16px; border-radius:var(--radius-md); border:1px solid var(--border-subtle); margin-bottom:16px; display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px;">
+                    <div>
+                        <strong style="font-size:13px; color:var(--text-primary);">Compare Active Session With:</strong>
+                        <p style="font-size:11px; color:var(--text-secondary);">Select a secondary capture file or benchmark baseline</p>
+                    </div>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <button class="btn btn-outline btn-sm" id="btn-compare-with-sample">
+                            <span>Compare with Baseline Sample</span>
+                        </button>
+                        <label class="btn btn-primary btn-sm" for="compare-file-input">
+                            <span>Upload Capture B (.pcap)</span>
+                            <input type="file" id="compare-file-input" accept=".pcap,.pcapng,.cap" style="display:none;">
+                        </label>
+                    </div>
+                </div>
+
+                <!-- Warning banner container -->
+                <div id="compare-warning-banner" style="display:none; margin-bottom:14px; padding:10px 14px; border-radius:var(--radius-md); font-size:12px; line-height:1.4; background:rgba(245,158,11,0.1); border:1px solid #f59e0b; color:var(--accent-amber);"></div>
+
+                <!-- Comparison Results Container -->
+                <div id="compare-results" style="display:none;">
+                    <!-- Capture Names Scorecard -->
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
+                        <div class="kpi-card" style="border-left:3px solid var(--accent-primary);">
+                            <div class="kpi-title" id="cmp-label-a">Capture A (Baseline)</div>
+                            <div class="kpi-value" id="cmp-name-a" style="font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Active Capture</div>
+                        </div>
+                        <div class="kpi-card" style="border-left:3px solid var(--accent-emerald);">
+                            <div class="kpi-title" id="cmp-label-b">Capture B (Target)</div>
+                            <div class="kpi-value" id="cmp-name-b" style="font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Secondary Capture</div>
+                        </div>
+                    </div>
+
+                    <!-- Metrics Differential Table -->
+                    <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-secondary); margin-bottom:6px;">Key Metrics Variance</h4>
+                    <div class="table-viewport" style="margin-bottom:16px; border:1px solid var(--border-default); border-radius:var(--radius-md);">
+                        <table class="data-table" id="table-compare-metrics">
+                            <thead>
+                                <tr>
+                                    <th>Metric</th>
+                                    <th>Capture A</th>
+                                    <th>Capture B</th>
+                                    <th>Absolute Delta</th>
+                                    <th>Percentage Shift</th>
+                                </tr>
+                            </thead>
+                            <tbody id="compare-metrics-tbody"></tbody>
+                        </table>
+                    </div>
+
+                    <!-- Protocol Shift Table -->
+                    <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-secondary); margin-bottom:6px;">Protocol Distribution Shifts</h4>
+                    <div class="table-viewport" style="border:1px solid var(--border-default); border-radius:var(--radius-md);">
+                        <table class="data-table" id="table-compare-protocols">
+                            <thead>
+                                <tr>
+                                    <th>Protocol</th>
+                                    <th>Capture A Share</th>
+                                    <th>Capture B Share</th>
+                                    <th>Share Shift (&Delta;%)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="compare-protocols-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div id="compare-placeholder" class="empty-state">
+                    Upload a secondary PCAP file or click "Compare with Baseline Sample" above to run comparative analysis.
                 </div>
             </div>
         </div>

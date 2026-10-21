@@ -3,52 +3,60 @@
 [![Python](https://img.shields.io/badge/Python-3.13-blue.svg)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.1.3-green.svg)](https://flask.palletsprojects.com/)
 [![Scapy](https://img.shields.io/badge/Scapy-2.8.0-red.svg)](https://scapy.net/)
-[![Tests](https://img.shields.io/badge/Tests-43%20Passed-emerald.svg)](docs/test_report.md)
+[![Tests](https://img.shields.io/badge/Tests-55%20Passed-emerald.svg)](docs/test_report.md)
 [![Themes](https://img.shields.io/badge/UI-Dark%20%7C%20Light%20Modes-indigo.svg)]()
 [![Academic](https://img.shields.io/badge/Category-Computer%20Networks%20Mini--Project-purple.svg)]()
 
-> **Computer Networks Laboratory Mini-Project Deliverable (Release 2.0)**  
-> An autonomous, mathematically verified network packet analyzer, statistical intelligence engine, and interactive professional web dashboard with dual Light/Dark theme support.
+> **Computer Networks Laboratory Mini-Project Deliverable (Release 3.0 Excellence Upgrade)**  
+> An autonomous, mathematically verified network packet analyzer, statistical intelligence engine, stateful TCP conversation inspector, differential capture comparator, and interactive professional web dashboard with dual Light/Dark theme support.
 
 ---
 
-## NetScope 2.0 Interface Preview
+## NetScope 3.0 Visual Interface Gallery
 
-| Dark Theme (Default Lab Mode) | Light Theme (Auditorium & Print Mode) |
+| TCP Conversation Inspector (Ladder Progression) | Differential Capture Comparison |
 |:---:|:---:|
-| ![NetScope 2.0 Dark Theme Dashboard](docs/screenshots/dashboard_dark.png) | ![NetScope 2.0 Light Theme Dashboard](docs/screenshots/dashboard_light.png) |
+| ![TCP Conversation Inspector](docs/screenshots/tcp_conversation_inspector.png) | ![Capture Comparison](docs/screenshots/capture_comparison.png) |
 
-| Deep Packet Layer Inspector | Explainable Security Anomaly Cards |
+| Self-Contained HTML Intelligence Report | Dark Theme Dashboard Overview |
 |:---:|:---:|
-| ![Packet Inspector Modal](docs/screenshots/packet_inspector_modal.png) | ![Security Alerts View](docs/screenshots/security_alerts.png) |
+| ![HTML Report Preview](docs/screenshots/html_report_preview.png) | ![NetScope Dark Theme Dashboard](docs/screenshots/dashboard_dark.png) |
+
+| Light Theme (Auditorium & Print Mode) | Deep Packet Protocol Inspector |
+|:---:|:---:|
+| ![NetScope Light Theme Dashboard](docs/screenshots/dashboard_light.png) | ![Packet Inspector Modal](docs/screenshots/packet_inspector_modal.png) |
 
 ---
 
 ## 1. Project Overview & Highlights
-NetScope ingests network packet captures (offline `.pcap` / `.pcapng` files and live network interfaces), parses multi-layer protocols, computes academically verified traffic metrics, detects stateful security anomalies (SYN floods, port scans), groups conversations into 5-tuple flows, and visualizes the results on an interactive web dashboard with zero external CDN dependencies.
+NetScope ingests network packet captures (offline `.pcap` / `.pcapng` files and live network interfaces), parses multi-layer protocols, computes academically verified traffic metrics, detects stateful security anomalies (SYN floods, port scans), groups conversations into 5-tuple flows, inspects TCP connection lifecycles, compares capture runs side-by-side, and visualizes results on an interactive web dashboard with zero external CDN dependencies.
 
-### Core Features & What's New in NetScope 2.0:
+### What's New in NetScope 3.0:
+- **Advanced TCP Conversation Inspector**:
+  - Chronological ladder tracking SYN, SYN-ACK, ACK, Data segments, FIN teardown, and RST aborts.
+  - Directional vector indicators (`A -> B` vs `B -> A`), relative timestamps from connection inception, sequence and acknowledgment tracking, frame length, and retransmission detection.
+  - Explicit connection state classification distinguishing verified 3-way handshakes from incomplete attempts and mid-stream captures.
+  - Interactive packet cross-linking: click any ladder frame to inspect the underlying packet fields directly.
+- **Differential Capture Comparison**:
+  - Side-by-side statistical comparison of two captures (Capture A vs Capture B) or active capture vs baseline fixture.
+  - Evaluates volume variance, duration shifts, packet rate and throughput deltas, host diversity, and protocol percentage shifts.
+  - **Methodological Guardrails**: Automatically warns when observation spans differ significantly, preventing misleading rate conclusions.
+- **Self-Contained HTML Report Generation**:
+  - Export professional, print-ready, standalone HTML analysis reports (`/api/export/report`).
+  - Includes verified KPI scorecards, protocol breakdown tables, top talkers, flow summaries, explainable heuristic alerts, and academic disclaimers.
+  - Zero external CDN or internet requirements with strict XSS sanitization (`html.escape`).
 - **Professional Dual-Theme System (Light & Dark)**:
   - Engineered with comprehensive semantic design tokens (`--bg-canvas`, `--surface-card`, `--text-primary`, `--border-subtle`).
   - Single-click theme switcher in header with instant transition and zero page reload.
   - Zero-flash startup using inline DOM script; automatically honors OS system preference (`prefers-color-scheme`) with persistent `localStorage`.
   - **Dynamic Plotly Relayout**: Real-time chart recoloring without re-fetching network datasets or redrawing from scratch.
-- **Offline PCAP Ingestion**: Incremental, memory-bounded reading of PCAP/PCAPNG captures with stream closure guarantees and sub-millisecond parsing.
-- **Deep Protocol Decoding**: Detailed multi-layer extraction across Ethernet, ARP, IPv4, IPv6, TCP, UDP, ICMP, DNS, HTTP, and TLS.
-  - **Comprehensive DNS Parsing**: Decodes transaction ID, query names, query type names (`A`, `AAAA`, `CNAME`, `MX`, `TXT`, `PTR`, `NS`, `SOA`), flags (`AA`, `TC`, `RD`, `RA`), response codes (`NOERROR`, `NXDOMAIN`, `SERVFAIL`), and answer records.
-- **Strict Classification**: Validates application-layer payload byte signatures (HTTP verbs, TLS record headers) rather than guessing from port numbers alone.
-- **Deterministic Analytics**: Throughput (bps/kbps/Mbps), packets-per-second (PPS), average packet size, capture duration, protocol percentages, relative timing from $t_0 = 0.000\text{s}$, and chronological time buckets.
-- **Canonical Flow Tracking & Consistent Counting**:
-  - Symmetric 5-tuples `(IP A, IP B, Protocol, Port A, Port B)` tracking bidirectional conversations, forward/reverse volumes, inter-arrival durations, TCP connection states (`SYN_SENT`, `SYN_ACK`, `ESTABLISHED`, `RESET`, `CLOSING`, `CLOSED`), and per-flow packet filtering.
-  - Dynamic flow table limit selection (10, 25, 50, All) with synchronized `Showing Top X of Y Flows` badge matching top-level KPI metrics.
-- **Explainable Anomaly Alerts (Zero `undefined` Artifacts)**:
-  - Heuristic detection distinguishing observable traffic facts from unconfirmed suspicions. Flags rapid SYN bursts, vertical/horizontal multi-port scans, packet rate spikes, and dominant hosts.
-  - Every alert displays verified strings for **Observed Value**, **Configured Threshold**, **Sliding Time Window**, **Affected Host**, and **Target**.
-  - **Interactive Packet Evidence Links**: Clickable supporting packet badges jump straight into the Protocol Layer Inspector for that exact frame.
-- **Dynamic Threshold Configuration**: Runtime threshold adjustment modal and API (`GET/POST /api/alerts/config`) enabling instant tuning without restarting the server.
-- **Packet Explorer**: High-performance grid with sticky table headers, sub-millisecond search, combinable protocol/IP/port/packet ID/flow ID filters, pagination, click-to-inspect detail modal, and RFC 4180 CSV export.
-- **Defensive Robustness**: Gracefully handles malformed, truncated, or unhandled packets without crashing, labeling them as `Malformed` with diagnostic reasons.
-- **Offline Readiness**: Self-contained frontend bundle with local Plotly.js (`plotly.min.js`), requiring no active internet connection.
+- **Explainable Anomaly Intelligence**:
+  - Heuristic detection distinguishing observable traffic facts from unconfirmed suspicions.
+  - Every alert displays verified strings for **Observed Value**, **Configured Threshold**, **Sliding Time Window**, **Affected Host**, **Target**, and plausible benign explanations.
+  - **Clickable Packet Evidence Links**: Badges jump straight into the Protocol Layer Inspector for that exact frame.
+- **Deterministic Analytics & Defensive Robustness**:
+  - Rigorously separates capture throughput from engine processing speed.
+  - Gracefully handles malformed, truncated, or unhandled packets without crashing, labeling them as `Malformed` with diagnostic reasons.
 
 ---
 
@@ -74,12 +82,14 @@ netscope/
 │   │   __init__.py
 │   │   parser.py               # Normalized multi-layer packet decoder & DNS parser
 │   │   protocol_classifier.py  # Payload inspection & protocol identification
-│   │   flow_tracker.py         # Bidirectional 5-tuple flow & TCP state tracker
+│   │   flow_tracker.py         # Bidirectional 5-tuple flow, TCP state & conversation ladder
 │
-├── analytics/                  # Traffic Analytics & Heuristics
+├── analytics/                  # Traffic Analytics, Heuristics & Reports
 │   │   __init__.py
 │   │   statistics.py           # Throughput, PPS, averages & time-series
 │   │   anomaly_detector.py     # Configurable SYN flood, port scan & rate alert rules
+│   │   capture_comparator.py   # Differential capture analysis & metric deltas
+│   │   report_generator.py     # Standalone print-ready HTML report engine
 │
 ├── storage/                    # Persistence Subsystem
 │   │   __init__.py
@@ -87,17 +97,17 @@ netscope/
 │
 ├── routes/                     # REST API Service
 │   │   __init__.py
-│   │   api.py                  # Endpoints for stats, packets, flows, alerts & CSV
+│   │   api.py                  # Endpoints for stats, packets, flows, timeline, compare & reports
 │
 ├── templates/                  # Frontend Presentation
-│   │   index.html              # Responsive dark navy dashboard layout
+│   │   index.html              # Responsive dual-theme dashboard layout with conversation & compare modals
 │
 ├── static/                     # Assets & Scripts
 │   ├── css/
-│   │   └── style.css           # Custom dark theme styles & filter tags
+│   │   └── style.css           # Custom dark & light theme styles, ladders & delta pills
 │   └── js/
-│       ├── charts.js           # Plotly chart renderers
-│       ├── dashboard.js        # Controller, safe DOM rendering, flows & alerts
+│       ├── charts.js           # Plotly chart renderers & dynamic theme relayout
+│       ├── dashboard.js        # Controller, conversation inspector, comparison & alerts
 │       └── vendor/
 │           └── plotly.min.js   # Offline Plotly.js library
 │
@@ -107,6 +117,9 @@ netscope/
 │   │   test_statistics.py      # Metric calculations & formula tests
 │   │   test_pcap_reader.py     # PCAP reading & error handling tests
 │   │   test_anomaly_detector.py# Heuristic alerts, false-positive & config tests
+│   │   test_conversation_inspector.py # Handshakes, teardown, mid-stream & retransmissions
+│   │   test_comparator.py      # Capture comparison, zero-guards & duration warnings
+│   │   test_report_generator.py# HTML report rendering & XSS security escaping tests
 │   │   test_filters.py         # Query, port, packet ID, flow ID & CSV export tests
 │   │   test_api.py             # REST API endpoint integration & config tests
 │   │   test_lifecycle.py       # Capture lifecycle & queue stress tests
@@ -118,6 +131,20 @@ netscope/
 └── docs/                       # Academic Submission Documentation
     ├── problem_statement.md    # Problem statement & academic motivation
     ├── objectives_and_scope.md # Project scope, deliverables & constraints
+    ├── architecture.md         # Architecture design & Mermaid topology
+    ├── protocol_design.md      # Normalized schema & API contract
+    ├── implementation.md       # Module-by-module technical breakdown
+    ├── test_plan.md            # Verification strategy & test matrix
+    ├── test_report.md          # Complete test results (55/55 passing)
+    ├── performance_report.md   # Empirical benchmarks (throughput, latency, memory)
+    ├── limitations.md          # Technical constraints & driver notes
+    ├── demo_script.md          # Five-minute presentation walkthrough
+    ├── viva_questions.md       # 28 comprehensive viva questions & answers
+    ├── wireshark_verification.md# Industrial Wireshark comparison procedure
+    ├── screenshot_checklist.md # Visual evidence inventory
+    ├── contributions.md        # Individual team contribution record
+    └── screenshots/            # Verified application captures
+```
     ├── architecture.md         # Architecture design & Mermaid topology
     ├── protocol_design.md      # Normalized schema & API contract
     ├── implementation.md       # Module-by-module technical breakdown
@@ -209,15 +236,30 @@ http://127.0.0.1:5000
    - Click the **Filter Flow** button on any flow to filter the packet explorer table to only packets belonging to that conversation.
    - Click the active flow badge to clear the flow filter.
 
-5. **Security Alerts & Threshold Tuning**:
+5. **TCP Conversation Inspector**:
+   - In the Canonical Network Flows table, click the **Inspect** button on any flow (e.g. `flow-3`).
+   - Opens the **TCP Conversation Inspector** showing the complete chronological ladder: SYN, SYN-ACK, ACK, Data frames, FIN, RST, relative times, directional vectors, sequence/ack numbers, frame lengths, and retransmissions.
+   - Click any frame reference (`#16`) to immediately view the low-level decoded protocol layers.
+
+6. **Differential Capture Comparison**:
+   - Click the **Compare** button in the header actions.
+   - Compare the active capture against the baseline sample (`sample_traffic.pcap`) or upload a second `.pcap` file.
+   - Reviews statistical deltas across packets, bytes, durations, arrival rates, throughput, host diversity, and protocol distribution shifts.
+   - Includes automatic methodological alerts if observation time windows differ significantly.
+
+7. **Download Standalone HTML Intelligence Report**:
+   - Click the **Report** button in the header actions.
+   - Immediately generates and downloads/views a self-contained, print-ready, professional HTML traffic intelligence report with verified KPIs, protocol tables, flow summaries, and academic disclaimers.
+
+8. **Security Alerts & Threshold Tuning**:
    - Inspect security alerts detailing affected hosts, observed values, thresholds, sliding time windows, and supporting packet references.
    - Click any packet reference badge to inspect that specific packet immediately.
-   - Click **Configure Thresholds** in the Alerts header to adjust SYN flood or port scan thresholds in real-time.
+   - Click **Thresholds** in the header to adjust SYN flood or port scan parameters in real-time.
 
-6. **Export Dataset**:
+9. **Export Dataset**:
    - Apply any desired filters and click **Export CSV** to download the active filtered dataset with Flow ID and Relative Time columns.
 
-7. **Live Packet Capture**:
+10. **Live Packet Capture**:
    - Select an available network interface from the dropdown and click **Capture**.
    - If Npcap is not installed on Windows, NetScope displays clear diagnostic remediation.
 
@@ -229,7 +271,7 @@ http://127.0.0.1:5000
 ```powershell
 .\.venv\Scripts\pytest.exe -v
 ```
-All **43 tests** pass with 100% success rate in ~2.21 seconds.
+All **55 tests** pass with 100% success rate in ~3.03 seconds.
 
 ### Run Performance & Correctness Benchmarks:
 ```powershell
