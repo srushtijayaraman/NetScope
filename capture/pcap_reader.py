@@ -24,7 +24,7 @@ class OfflinePcapProcessor:
     def process_file(
         self,
         filepath: str,
-        capture_id: str,
+        capture_id: str = "default",
         packet_callback: Optional[Callable[[dict], None]] = None,
     ) -> dict:
         """
@@ -90,6 +90,7 @@ class OfflinePcapProcessor:
             "filename": os.path.basename(filepath),
             "file_size_bytes": file_size,
             "packets_processed": packet_count,
+            "packet_count": packet_count,
             "packets_skipped": skipped_count,
             "processing_time_seconds": round(elapsed_wall_time, 4),
             "processing_pps": round(packet_count / elapsed_wall_time, 2) if elapsed_wall_time > 0 else 0.0,

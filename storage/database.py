@@ -7,6 +7,7 @@ Does not store massive raw packet payloads permanently, preserving storage effic
 import sqlite3
 import os
 import json
+from contextlib import contextmanager
 from datetime import datetime, timezone
 
 
@@ -17,10 +18,14 @@ class DatabaseManager:
             os.makedirs(os.path.dirname(os.path.abspath(db_path)), exist_ok=True)
         self.init_db()
 
+    @contextmanager
     def _get_connection(self):
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            yield conn
+        finally:
+            conn.close()
 
     def init_db(self):
         """Initializes tables for sessions, summaries, and alerts."""

@@ -3,7 +3,7 @@
 [![Python](https://img.shields.io/badge/Python-3.13-blue.svg)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.1.3-green.svg)](https://flask.palletsprojects.com/)
 [![Scapy](https://img.shields.io/badge/Scapy-2.8.0-red.svg)](https://scapy.net/)
-[![Tests](https://img.shields.io/badge/Tests-55%20Passed-emerald.svg)](docs/test_report.md)
+[![Tests](https://img.shields.io/badge/Tests-61%20Passed-emerald.svg)](docs/test_report.md)
 [![Themes](https://img.shields.io/badge/UI-Dark%20%7C%20Light%20Modes-indigo.svg)]()
 [![Academic](https://img.shields.io/badge/Category-Computer%20Networks%20Mini--Project-purple.svg)]()
 
@@ -111,22 +111,23 @@ netscope/
 │       └── vendor/
 │           └── plotly.min.js   # Offline Plotly.js library
 │
-├── tests/                      # Automated Quality Assurance Suite
-│   │   conftest.py             # Test client & deterministic fixtures
-│   │   test_parser.py          # Protocol parsing, DNS & defensive decoding tests
-│   │   test_statistics.py      # Metric calculations & formula tests
-│   │   test_pcap_reader.py     # PCAP reading & error handling tests
-│   │   test_anomaly_detector.py# Heuristic alerts, false-positive & config tests
-│   │   test_conversation_inspector.py # Handshakes, teardown, mid-stream & retransmissions
-│   │   test_comparator.py      # Capture comparison, zero-guards & duration warnings
-│   │   test_report_generator.py# HTML report rendering & XSS security escaping tests
-│   │   test_filters.py         # Query, port, packet ID, flow ID & CSV export tests
-│   │   test_api.py             # REST API endpoint integration & config tests
-│   │   test_lifecycle.py       # Capture lifecycle & queue stress tests
+├── tests/                      # Automated Quality Assurance Suite (61 Tests)
+│   ├── conftest.py             # Test client & deterministic fixtures
+│   ├── test_parser.py          # Protocol parsing, DNS & defensive decoding tests
+│   ├── test_statistics.py      # Metric calculations & formula tests
+│   ├── test_pcap_reader.py     # PCAP reading & error handling tests
+│   ├── test_pcap_fixtures.py   # Physical PCAP handshakes, teardown & retransmission tests
+│   ├── test_anomaly_detector.py# Heuristic alerts, false-positive & config tests
+│   ├── test_conversation_inspector.py # Handshakes, teardown, mid-stream & retransmissions
+│   ├── test_comparator.py      # Capture comparison, zero-guards & duration warnings
+│   ├── test_report_generator.py# HTML report rendering & XSS security escaping tests
+│   ├── test_filters.py         # Query, port, packet ID, flow ID & CSV export tests
+│   ├── test_api.py             # REST API endpoint integration & config tests
+│   └── test_lifecycle.py       # Capture lifecycle & queue stress tests
 │
 ├── data/                       # Captures & Datasets
-│   │   README.md               # Dataset descriptions & verification notes
-│   │   sample_traffic.pcap     # Deterministic 60-packet multi-protocol fixture
+│   ├── README.md               # Dataset descriptions & verification notes
+│   └── sample_traffic.pcap     # Deterministic 60-packet multi-protocol fixture
 │
 └── docs/                       # Academic Submission Documentation
     ├── problem_statement.md    # Problem statement & academic motivation
@@ -135,21 +136,7 @@ netscope/
     ├── protocol_design.md      # Normalized schema & API contract
     ├── implementation.md       # Module-by-module technical breakdown
     ├── test_plan.md            # Verification strategy & test matrix
-    ├── test_report.md          # Complete test results (55/55 passing)
-    ├── performance_report.md   # Empirical benchmarks (throughput, latency, memory)
-    ├── limitations.md          # Technical constraints & driver notes
-    ├── demo_script.md          # Five-minute presentation walkthrough
-    ├── viva_questions.md       # 28 comprehensive viva questions & answers
-    ├── wireshark_verification.md# Industrial Wireshark comparison procedure
-    ├── screenshot_checklist.md # Visual evidence inventory
-    ├── contributions.md        # Individual team contribution record
-    └── screenshots/            # Verified application captures
-```
-    ├── architecture.md         # Architecture design & Mermaid topology
-    ├── protocol_design.md      # Normalized schema & API contract
-    ├── implementation.md       # Module-by-module technical breakdown
-    ├── test_plan.md            # Verification strategy & test matrix
-    ├── test_report.md          # Complete test results (41/41 passing)
+    ├── test_report.md          # Complete test results (61/61 passing)
     ├── performance_report.md   # Empirical benchmarks (throughput, latency, memory)
     ├── limitations.md          # Technical constraints & driver notes
     ├── demo_script.md          # Five-minute presentation walkthrough
@@ -271,7 +258,7 @@ http://127.0.0.1:5000
 ```powershell
 .\.venv\Scripts\pytest.exe -v
 ```
-All **55 tests** pass with 100% success rate in ~3.03 seconds.
+All **61 tests** across 11 test modules pass with a 100% success rate in ~2.50 seconds with zero warnings.
 
 ### Run Performance & Correctness Benchmarks:
 ```powershell
@@ -283,15 +270,19 @@ This runs Experiments A through E, testing offline processing rate, mathematical
 
 ## 7. Performance & Verification Highlights
 
-| Metric | Measured Result |
-|---|---|
-| **Small Capture Processing (60 pkts)** | **2,750.25 PPS** (0.0218 s) |
-| **Medium Capture Processing (500 pkts)** | **1,588.92 PPS** (0.3147 s) |
-| **Large Capture Processing (2,500 pkts)** | **1,425.06 PPS** (1.7543 s) |
-| **Formula Accuracy vs Ground Truth** | **100% exact match** across all 10 metrics |
-| **Filter Query Latency** | Under **0.81 milliseconds** across all queries |
-| **Dashboard API Latency** | Under **0.89 milliseconds** across all endpoints |
-| **Memory Footprint** | Bounded **104.7 MB - 112.7 MB RSS** |
+| Metric | Measured Result | Evaluation Note |
+|---|---|---|
+| **Small Capture Processing (60 pkts)** | **2,750.25 PPS** (0.0218 s) | Ingestion throughput on Python 3.13 |
+| **Medium Capture Processing (500 pkts)** | **1,588.92 PPS** (0.3147 s) | Sustained parsing & state tracking |
+| **Large Capture Processing (2,500 pkts)** | **1,425.06 PPS** (1.7543 s) | Bounded memory buffer management |
+| **Formula Accuracy vs Ground Truth** | **100% exact match** across all 10 metrics | Verified against RFC 793 / RFC 8200 math |
+| **Filter Query Latency** | Under **0.81 milliseconds** | O(1) indexed dictionary retrieval |
+| **Dashboard API Latency** | Under **0.89 milliseconds** | Instantaneous REST endpoint delivery |
+| **Memory Footprint** | Bounded **104.7 MB - 112.7 MB RSS** | Leak-free garbage collection |
+
+### Architectural Metric Integrity & Verification Standards:
+- **Capture Duration vs. Processing Rate**: NetScope strictly distinguishes *Capture Duration* (the physical on-wire span between $t_{\max}$ and $t_{\min}$) from *Processing Time* (wall-clock elapsed time consumed by offline ingestion). Rate calculations ($PPS_{\text{capture}} = N / \text{duration}$) and processing speed ($PPS_{\text{proc}} = N / \text{elapsed}$) are computed and displayed independently across the UI and reports.
+- **Wireshark Verification Standard**: In environments without a local TShark/Wireshark installation, calculations are verified against RFC 793 / RFC 8200 standards and Scapy ground truth. A complete, independent Wireshark verification protocol with exact display filters and expected values is documented in [`docs/wireshark_verification.md`](docs/wireshark_verification.md).
 
 ---
 

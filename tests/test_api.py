@@ -198,4 +198,37 @@ def test_flows_api_matches_stats_flow_count(client):
     assert "tcp_state" in first_flow
 
 
+def test_empty_session_and_error_handling(client):
+    """Verify clean responses and error codes when querying empty states or invalid resources."""
+    # Reset active session
+    res_reset = client.post("/api/captures/reset")
+    assert res_reset.status_code == 200
+
+    # 1. Stats on empty session
+    res_stats = client.get("/api/stats")
+    assert res_stats.status_code == 200
+    assert res_stats.json["total_packets"] == 0
+    assert res_stats.json["active_flows"] == 0
+    assert res_stats.json["capture_duration_seconds"] == 0.0
+
+    # 2. Report export on empty session returns 400
+    res_rep = client.get("/api/export/report")
+    assert res_rep.status_code == 400
+    assert "No capture session active" in res_rep.json["error"]
+
+    # 3. Compare without active session returns 400
+    res_cmp = client.post("/api/captures/compare", json={"compare_sample": True})
+    assert res_cmp.status_code == 400
+    assert "No active capture to compare against" in res_cmp.json["error"]
+
+    # 4. Flow timeline 404
+    res_flow_404 = client.get("/api/flows/nonexistent-flow/timeline")
+    assert res_flow_404.status_code == 404
+
+    # 5. Packet detail 404
+    res_pkt_404 = client.get("/api/packets/123456")
+    assert res_pkt_404.status_code == 404
+
+
+
 

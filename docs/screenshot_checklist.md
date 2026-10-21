@@ -13,7 +13,7 @@ This checklist documents the graphical visual evidence generated for project sub
 | **SS-03** | Packet Inspector Modal | `docs/screenshots/packet_inspector_modal.png` | **Captured (Real)** | Real capture showing multi-layer protocol breakdown, TCP flags, and hex payload viewer |
 | **SS-04** | Security Alerts & Anomaly Details | `docs/screenshots/security_alerts.png` | **Captured (Real)** | Real capture showing anomaly cards with exact observed values, thresholds, sliding windows, and packet references |
 | **SS-05** | Legacy Dashboard Overview | `docs/screenshots/dashboard_overview.png` | Captured (Archive) | Initial version 1.0 baseline capture |
-| **SS-06** | Automated Test Output | `docs/test_report.md` | Terminal Output Verified | 55 passed tests in 3.03 seconds (100% pass rate) |
+| **SS-06** | Automated Test Output | `docs/test_report.md` | Terminal Output Verified | 61 passed tests in 2.50 seconds (100% pass rate, 0 warnings) |
 | **SS-07** | Wireshark Side-by-Side | `docs/wireshark_verification.md` | Procedure Ready | Dual-verification procedure documenting Scapy vs Wireshark metrics |
 | **SS-08** | TCP Conversation Inspector | `docs/screenshots/tcp_conversation_inspector.png` | **Captured (Real)** | NetScope 3.0 chronological ladder diagram with SYN/ACK state machine, retransmission flags, and frame cross-links |
 | **SS-09** | Differential Capture Comparison | `docs/screenshots/capture_comparison.png` | **Captured (Real)** | NetScope 3.0 side-by-side PCAP comparison with delta pills, protocol shifts, and disparate duration warning |

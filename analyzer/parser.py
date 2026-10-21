@@ -298,8 +298,7 @@ def parse_packet(packet: Packet, packet_id: int, capture_id: str = "default", ba
             try:
                 qd_list = getattr(dns, "qd", None)
                 if qd_list:
-                    # Index first element cleanly
-                    first_qd = qd_list[0] if hasattr(qd_list, "__getitem__") else qd_list
+                    first_qd = qd_list[0] if isinstance(qd_list, (list, tuple)) and len(qd_list) > 0 else qd_list
                     qn = getattr(first_qd, "qname", b"")
                     qname = qn.decode(errors="replace") if isinstance(qn, bytes) else str(qn)
                     qt = getattr(first_qd, "qtype", 1)
@@ -311,22 +310,15 @@ def parse_packet(packet: Packet, packet_id: int, capture_id: str = "default", ba
             if is_response:
                 try:
                     an_layer = getattr(dns, "an", None)
-                    curr = an_layer
-                    while curr and len(answers) < 8:
-                        rr = curr[0] if hasattr(curr, "__getitem__") and not hasattr(curr, "rdata") else curr
-                        rdata = getattr(rr, "rdata", "")
-                        if isinstance(rdata, bytes):
-                            rdata = rdata.decode(errors="replace")
-                        rr_type = getattr(rr, "type", 1)
-                        rr_type_name = DNS_QTYPES.get(rr_type, f"Type {rr_type}").split(" ")[0]
-                        answers.append(f"{rr_type_name}: {rdata}")
-
-                        if hasattr(curr, "payload") and getattr(curr.payload, "name", "") == "DNS Resource Record":
-                            curr = curr.payload
-                        elif hasattr(curr, "__getitem__") and len(answers) < len(curr):
-                            curr = curr[len(answers)]
-                        else:
-                            break
+                    if an_layer:
+                        rr_list = list(an_layer) if isinstance(an_layer, (list, tuple)) else [an_layer]
+                        for rr in rr_list[:8]:
+                            rdata = getattr(rr, "rdata", "")
+                            if isinstance(rdata, bytes):
+                                rdata = rdata.decode(errors="replace")
+                            rr_type = getattr(rr, "type", 1)
+                            rr_type_name = DNS_QTYPES.get(rr_type, f"Type {rr_type}").split(" ")[0]
+                            answers.append(f"{rr_type_name}: {rdata}")
                 except Exception:
                     pass
 

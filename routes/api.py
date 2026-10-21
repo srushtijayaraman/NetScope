@@ -239,6 +239,13 @@ def load_sample():
     })
 
 
+@api_bp.route("/captures/reset", methods=["POST"])
+def reset_session():
+    """Clears the active capture session and resets all memory buffers."""
+    reset_active_session(capture_id="", filename="", mode="idle")
+    return jsonify({"success": True, "message": "Session reset successfully."})
+
+
 @api_bp.route("/captures/start", methods=["POST"])
 def start_live_capture():
     data = request.get_json(silent=True) or {}

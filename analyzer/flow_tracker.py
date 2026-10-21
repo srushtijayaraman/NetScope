@@ -119,6 +119,8 @@ class FlowTracker:
                 flow["_saw_syn"] = True
             elif "PSH" in flags or (pkt_len > 54 and "ACK" in flags):
                 event_type = "APPLICATION_DATA"
+                if flow["_saw_syn_ack"] and not flow["_saw_handshake_ack"] and is_forward:
+                    flow["_saw_handshake_ack"] = True
             elif flags == ["ACK"]:
                 event_type = "ACK"
                 if flow["_saw_syn_ack"] and not flow["_saw_handshake_ack"] and is_forward:
@@ -154,6 +156,8 @@ class FlowTracker:
             # Handshake categorization
             if flow["_saw_syn"] and flow["_saw_syn_ack"] and flow["_saw_handshake_ack"]:
                 flow["handshake_status"] = "Complete (3-Way Handshake)"
+            elif flow["_saw_syn"] and flow["_saw_syn_ack"] and not flow["_saw_handshake_ack"]:
+                flow["handshake_status"] = "Incomplete (SYN-ACK Received, Missing Final ACK)"
             elif flow["_saw_syn"] and not flow["_saw_syn_ack"]:
                 flow["handshake_status"] = "Incomplete (SYN Sent Only)"
             elif flow["_saw_syn_ack"] and not flow["_saw_syn"]:
