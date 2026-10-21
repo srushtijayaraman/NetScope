@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NetScope | Real-Time Network Packet Analyzer & Traffic Intelligence</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- Local offline Plotly.js -->
+    <script src="/static/js/vendor/plotly.min.js"></script>
+</head>
+<body>
+    <!-- Top Navigation & Header -->
+    <header class="app-header">
+        <div class="brand">
+            <div class="logo-icon">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
+                </svg>
+            </div>
+            <div>
+                <h1>NetScope <span class="badge badge-academic">Computer Networks Mini-Project</span></h1>
+                <p class="subtitle">Real-Time Packet Analyzer & Traffic Intelligence Dashboard</p>
+            </div>
+        </div>
+
+        <div class="header-status-group">
+            <div class="status-indicator">
+                <span class="status-dot status-ready" id="status-dot"></span>
+                <span class="status-text" id="status-text">Ready</span>
+            </div>
+            <div class="mode-badge" id="mode-badge">Mode: Idle</div>
+            <div class="session-badge" id="session-badge" title="Active Source">No Active Session</div>
+        </div>
+
+        <div class="header-actions">
+            <!-- Upload PCAP -->
+            <label class="btn btn-outline" for="pcap-file-input" title="Upload an offline PCAP/PCAPNG capture file">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                </svg>
+                <span>Upload PCAP</span>
+                <input type="file" id="pcap-file-input" accept=".pcap,.pcapng,.cap" style="display:none;">
+            </label>
+
+            <!-- Load Sample Capture Button -->
+            <button class="btn btn-primary" id="btn-load-sample" title="Instantly load pre-generated multi-protocol sample PCAP">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="5 3 19 12 5 21 5 3"/>
+                </svg>
+                <span>Load Sample PCAP</span>
+            </button>
+
+            <!-- Live Capture Controls -->
+            <div class="live-capture-controls">
+                <select id="interface-select" class="form-select" title="Network Interface">
+                    <option value="">Select Interface...</option>
+                </select>
+                <button class="btn btn-success" id="btn-start-live" title="Start Live Capture">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="10"/>
+                        <circle cx="12" cy="12" r="3" fill="currentColor"/>
+                    </svg>
+                    <span>Capture</span>
+                </button>
+                <button class="btn btn-danger" id="btn-stop-live" title="Stop Live Capture" style="display:none;">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="6" y="6" width="12" height="12"/>
+                    </svg>
+                    <span>Stop</span>
+                </button>
+            </div>
+
+            <!-- Auto Refresh Toggle -->
+            <button class="btn btn-icon" id="btn-refresh" title="Manually refresh dashboard">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M23 4v6h-6M1 20v-6h6"/>
+                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="dashboard-container">
+        <!-- Toast / Notification banner -->
+        <div id="notification-banner" class="notification-banner" style="display:none;"></div>
+
+        <!-- Section 1: Summary Metric Cards -->
+        <section class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Total Packets</div>
+                <div class="metric-value" id="val-total-packets">0</div>
+                <div class="metric-sub" id="val-processing-pps">Processing: 0 pps</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Total Volume</div>
+                <div class="metric-value" id="val-total-bytes">0 B</div>
+                <div class="metric-sub" id="val-avg-packet-size">Avg Size: 0 B</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Capture Rate</div>
+                <div class="metric-value" id="val-capture-pps">0 <span class="unit">pps</span></div>
+                <div class="metric-sub" id="val-capture-duration">Span: 0.00s</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Throughput</div>
+                <div class="metric-value" id="val-throughput">0.00 <span class="unit">kbps</span></div>
+                <div class="metric-sub" id="val-throughput-mbps">0.0000 Mbps</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Unique Hosts & Flows</div>
+                <div class="metric-value" id="val-unique-hosts">0</div>
+                <div class="metric-sub" id="val-active-flows">0 Active Flows</div>
+            </div>
+
+            <div class="metric-card">
+                <div class="metric-label">Integrity & Drops</div>
+                <div class="metric-value" id="val-errors-drops">0 / 0</div>
+                <div class="metric-sub">Parsing Errors / Queue Drops</div>
+            </div>
+        </section>
+
+        <!-- Section 2: Visualizations Row (Protocol Breakdown & Traffic Timeline) -->
+        <section class="charts-grid">
+            <!-- Protocol Distribution -->
+            <div class="card chart-card">
+                <div class="card-header">
+                    <h2>Protocol Distribution</h2>
+                    <div class="card-actions">
+                        <select id="protocol-layer-select" class="form-select-sm">
+                            <option value="transport">Transport Layer</option>
+                            <option value="network">Network Layer</option>
+                            <option value="application">Application Layer</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="chart-protocols" class="chart-container"></div>
+                    <div id="protocol-legend-table" class="protocol-table-wrapper"></div>
+                </div>
+            </div>
+
+            <!-- Traffic Timeline -->
+            <div class="card chart-card">
+                <div class="card-header">
+                    <h2>Traffic Timeline & Throughput</h2>
+                    <div class="card-actions">
+                        <button class="btn-xs btn-outline" id="btn-toggle-timeline-unit">Switch Metric (PPS / Kbps)</button>
+                    </div>
+                </div>
+                <div class="card-body">
+                    <div id="chart-timeline" class="chart-container"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 3: Traffic Intelligence (Top Talkers & Active Flows) -->
+        <section class="intelligence-grid">
+            <!-- Top Talkers -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>Top Talkers (Host Endpoints)</h2>
+                    <div class="tab-group" id="talker-tabs">
+                        <button class="tab-btn active" data-tab="sources">Sources</button>
+                        <button class="tab-btn" data-tab="destinations">Destinations</button>
+                        <button class="tab-btn" data-tab="ports">Top Ports</button>
+                    </div>
+                </div>
+                <div class="card-body scrollable-table">
+                    <table class="data-table" id="table-top-talkers">
+                        <thead>
+                            <tr id="top-talkers-thead">
+                                <th>IP Address</th>
+                                <th>Packets</th>
+                                <th>Volume</th>
+                            </tr>
+                        </thead>
+                        <tbody id="top-talkers-tbody">
+                            <tr><td colspan="3" class="text-center text-muted">No talker data available.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Network Flows -->
+            <div class="card">
+                <div class="card-header">
+                    <h2>Canonical Network Flows (5-Tuples)</h2>
+                    <span class="badge" id="flow-count-badge">0 Flows</span>
+                </div>
+                <div class="card-body scrollable-table">
+                    <table class="data-table" id="table-flows">
+                        <thead>
+                            <tr>
+                                <th>Flow Endpoints</th>
+                                <th>Protocol</th>
+                                <th>Duration</th>
+                                <th>Packets</th>
+                                <th>Volume</th>
+                                <th>State</th>
+                            </tr>
+                        </thead>
+                        <tbody id="flows-tbody">
+                            <tr><td colspan="6" class="text-center text-muted">No flows recorded.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 4: Security & Traffic Anomalies -->
+        <section class="card alert-card-section">
+            <div class="card-header">
+                <h2>Traffic Anomaly & Security Intelligence</h2>
+                <span class="badge badge-warning" id="alert-count-badge">0 Alerts</span>
+            </div>
+            <div class="card-body">
+                <div id="alerts-container" class="alerts-list">
+                    <div class="empty-state">No anomalies or heuristic threshold violations detected.</div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Section 5: Interactive Packet Explorer -->
+        <section class="card packet-explorer-card">
+            <div class="card-header explorer-header">
+                <div class="explorer-title-group">
+                    <h2>Packet Explorer</h2>
+                    <span class="badge" id="packet-filter-count">Showing 0 packets</span>
+                </div>
+
+                <!-- Filter Controls Bar -->
+                <div class="filter-toolbar">
+                    <input type="text" id="filter-search" class="form-input" placeholder="Search IP, port, summary...">
+                    
+                    <select id="filter-protocol" class="form-select">
+                        <option value="">All Protocols</option>
+                        <option value="TCP">TCP</option>
+                        <option value="UDP">UDP</option>
+                        <option value="ICMP">ICMP</option>
+                        <option value="ARP">ARP</option>
+                        <option value="DNS">DNS</option>
+                        <option value="HTTP">HTTP</option>
+                        <option value="TLS">TLS</option>
+                        <option value="IPv6">IPv6</option>
+                    </select>
+
+                    <input type="text" id="filter-src-ip" class="form-input form-input-sm" placeholder="Src IP">
+                    <input type="text" id="filter-dst-ip" class="form-input form-input-sm" placeholder="Dst IP">
+                    <input type="number" id="filter-port" class="form-input form-input-xs" placeholder="Port">
+
+                    <button class="btn btn-outline btn-sm" id="btn-reset-filters" title="Reset all filters">Reset</button>
+                    <button class="btn btn-secondary btn-sm" id="btn-export-csv" title="Export filtered packets to CSV">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                        </svg>
+                        Export CSV
+                    </button>
+                </div>
+            </div>
+
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="data-table packet-table" id="packet-table">
+                        <thead>
+                            <tr>
+                                <th data-sort="packet_id">#</th>
+                                <th data-sort="timestamp">Time (UTC)</th>
+                                <th data-sort="source_ip">Source</th>
+                                <th data-sort="destination_ip">Destination</th>
+                                <th>Net</th>
+                                <th>Trans</th>
+                                <th>App</th>
+                                <th data-sort="packet_length">Length</th>
+                                <th>Flags</th>
+                                <th>Info</th>
+                            </tr>
+                        </thead>
+                        <tbody id="packet-table-body">
+                            <tr><td colspan="10" class="text-center text-muted">No packets loaded. Upload a PCAP or load sample data.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination Bar -->
+                <div class="pagination-bar">
+                    <div class="pagination-info" id="pagination-info">Page 1 of 1 (0 total packets)</div>
+                    <div class="pagination-actions">
+                        <button class="btn btn-outline btn-sm" id="btn-prev-page" disabled>Previous</button>
+                        <span id="page-display" class="page-display">1</span>
+                        <button class="btn btn-outline btn-sm" id="btn-next-page" disabled>Next</button>
+                        <select id="page-size-select" class="form-select-sm">
+                            <option value="25">25 / page</option>
+                            <option value="50" selected>50 / page</option>
+                            <option value="100">100 / page</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Packet Details Modal -->
+    <div id="packet-detail-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3 id="modal-packet-title">Packet # Details</h3>
+                <button class="modal-close" id="btn-close-modal">&times;</button>
+            </div>
+            <div class="modal-body" id="modal-packet-body">
+                <!-- Dynamically populated layers -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+        <p>NetScope Traffic Intelligence Platform &bull; Computer Networks Academic Mini-Project &bull; Python / Flask / Scapy / SQLite &bull; Strictly Localhost Execution</p>
+    </footer>
+
+    <!-- Scripts -->
+    <script src="/static/js/charts.js"></script>
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

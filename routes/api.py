@@ -1,0 +1,525 @@
+"""
+NetScope REST API Endpoints
+Implements clean, predictable JSON endpoints with full input validation,
+server-side filtering, pagination, CSV export, and capture lifecycle control.
+"""
+
+import os
+import io
+import csv
+import time
+import uuid
+from flask import Blueprint, request, jsonify, Response, current_app
+from werkzeug.utils import secure_filename
+
+import scapy
+from capture.pcap_reader import OfflinePcapProcessor, PcapReaderError
+from capture.live_capture import LiveCaptureManager, get_available_interfaces, check_live_capture_capability
+from analyzer.parser import parse_packet
+from analyzer.flow_tracker import FlowTracker
+from analytics.statistics import TrafficAnalytics
+from analytics.anomaly_detector import AnomalyDetector
+from storage.database import DatabaseManager
+
+api_bp = Blueprint("api", __name__, url_prefix="/api")
+
+# Session state containers (Thread-safe lock where appropriate)
+import threading
+session_lock = threading.Lock()
+
+active_session = {
+    "capture_id": None,
+    "filename": None,
+    "mode": "none",
+    "packets": [],
+    "analytics": TrafficAnalytics(),
+    "flow_tracker": FlowTracker(),
+    "anomaly_detector": None,
+}
+
+live_manager = LiveCaptureManager()
+
+
+def get_db():
+    db_path = current_app.config.get("DATABASE_PATH", "storage/netscope.db")
+    return DatabaseManager(db_path)
+
+
+def get_detector():
+    if active_session["anomaly_detector"] is None:
+        active_session["anomaly_detector"] = AnomalyDetector(current_app.config)
+    return active_session["anomaly_detector"]
+
+
+def reset_active_session(capture_id: str, filename: str, mode: str):
+    with session_lock:
+        active_session["capture_id"] = capture_id
+        active_session["filename"] = filename
+        active_session["mode"] = mode
+        active_session["packets"].clear()
+        active_session["analytics"].reset()
+        active_session["flow_tracker"].reset()
+        detector = get_detector()
+        detector.reset()
+
+
+def on_packet_received(record: dict):
+    """Callback used by both offline reader and live capture worker."""
+    with session_lock:
+        active_session["analytics"].ingest_packet(record)
+        active_session["flow_tracker"].process_packet(record)
+        
+        # Real-time stateful alerts (SYN flood, Port scan)
+        detector = get_detector()
+        new_alerts = detector.evaluate_packet(record)
+        if new_alerts:
+            db = get_db()
+            for alt in new_alerts:
+                db.save_alert(active_session["capture_id"] or "live", alt)
+
+        # Retain bounded packet history in memory for table exploration
+        max_pkts = current_app.config.get("MAX_MEMORY_PACKETS", 10000)
+        if len(active_session["packets"]) < max_pkts:
+            active_session["packets"].append(record)
+
+
+@api_bp.route("/health", methods=["GET"])
+def health():
+    cap_check = check_live_capture_capability()
+    return jsonify({
+        "status": "ok",
+        "service": "NetScope",
+        "version": "1.0.0",
+        "scapy_version": scapy.__version__,
+        "live_capture_supported": cap_check["supported"],
+        "live_capture_info": cap_check["reason"],
+    })
+
+
+@api_bp.route("/interfaces", methods=["GET"])
+def list_interfaces():
+    cap_check = check_live_capture_capability()
+    ifaces = get_available_interfaces()
+    return jsonify({
+        "supported": cap_check["supported"],
+        "message": cap_check["reason"],
+        "solution": cap_check.get("solution"),
+        "interfaces": ifaces,
+    })
+
+
+@api_bp.route("/captures/upload", methods=["POST"])
+def upload_pcap():
+    if "file" not in request.files:
+        return jsonify({"error": "No file part in request."}), 400
+
+    file = request.files["file"]
+    if file.filename == "":
+        return jsonify({"error": "No file selected."}), 400
+
+    filename = secure_filename(file.filename)
+    ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    allowed = current_app.config.get("ALLOWED_EXTENSIONS", {"pcap", "pcapng", "cap"})
+
+    if ext not in allowed:
+        return jsonify({
+            "error": f"Invalid file extension '.{ext}'. Allowed: {', '.join(allowed)}"
+        }), 400
+
+    upload_dir = current_app.config.get("UPLOAD_FOLDER", "data/uploads")
+    os.makedirs(upload_dir, exist_ok=True)
+    capture_id = f"cap-{uuid.uuid4().hex[:8]}"
+    saved_path = os.path.join(upload_dir, f"{capture_id}_{filename}")
+    
+    file.save(saved_path)
+
+    # Process offline PCAP
+    reset_active_session(capture_id, filename, "offline")
+    processor = OfflinePcapProcessor(max_packets_memory=current_app.config.get("MAX_MEMORY_PACKETS", 10000))
+
+    try:
+        result = processor.process_file(
+            saved_path,
+            capture_id=capture_id,
+            packet_callback=on_packet_received,
+        )
+    except PcapReaderError as err:
+        return jsonify({"error": str(err)}), 422
+    except Exception as exc:
+        return jsonify({"error": f"Internal parser error: {str(exc)}"}), 500
+
+    # Evaluate batch anomalies (rates, dominant hosts)
+    with session_lock:
+        active_session["analytics"].processing_time_sec = result["processing_time_seconds"]
+        summary = active_session["analytics"].get_summary()
+        timeline = active_session["analytics"].get_traffic_timeline()
+        talkers = active_session["analytics"].get_top_talkers()
+        
+        detector = get_detector()
+        batch_alerts = detector.evaluate_batch_statistics(summary, timeline, talkers)
+        
+        # Persist session and alerts in database
+        db = get_db()
+        db.record_session(
+            capture_id=capture_id,
+            filename=filename,
+            mode="offline",
+            packet_count=result["packets_processed"],
+            byte_count=summary["total_bytes"],
+            duration_seconds=summary["capture_duration_seconds"],
+            status="COMPLETED",
+        )
+        db.save_summary(capture_id, summary)
+        for alt in batch_alerts:
+            db.save_alert(capture_id, alt)
+
+    return jsonify({
+        "success": True,
+        "message": f"Successfully parsed {result['packets_processed']} packets.",
+        "capture_id": capture_id,
+        "filename": filename,
+        "processing_time_seconds": result["processing_time_seconds"],
+        "processing_pps": result["processing_pps"],
+        "summary": summary,
+    }), 201
+
+
+@api_bp.route("/captures/load-sample", methods=["POST"])
+def load_sample():
+    """Loads a pre-generated sample PCAP from data/sample_traffic.pcap."""
+    sample_path = os.path.join(current_app.config.get("BASE_DIR", "."), "data", "sample_traffic.pcap")
+    if not os.path.exists(sample_path):
+        return jsonify({"error": "Sample PCAP file not found. Generate it first."}), 404
+
+    capture_id = f"sample-{uuid.uuid4().hex[:6]}"
+    filename = "sample_traffic.pcap"
+    reset_active_session(capture_id, filename, "offline")
+
+    processor = OfflinePcapProcessor(max_packets_memory=current_app.config.get("MAX_MEMORY_PACKETS", 10000))
+    try:
+        result = processor.process_file(
+            sample_path,
+            capture_id=capture_id,
+            packet_callback=on_packet_received,
+        )
+    except Exception as exc:
+        return jsonify({"error": f"Failed to load sample PCAP: {str(exc)}"}), 500
+
+    with session_lock:
+        active_session["analytics"].processing_time_sec = result["processing_time_seconds"]
+        summary = active_session["analytics"].get_summary()
+        timeline = active_session["analytics"].get_traffic_timeline()
+        talkers = active_session["analytics"].get_top_talkers()
+        
+        detector = get_detector()
+        batch_alerts = detector.evaluate_batch_statistics(summary, timeline, talkers)
+        
+        db = get_db()
+        db.record_session(
+            capture_id=capture_id,
+            filename=filename,
+            mode="offline",
+            packet_count=result["packets_processed"],
+            byte_count=summary["total_bytes"],
+            duration_seconds=summary["capture_duration_seconds"],
+            status="COMPLETED",
+        )
+        db.save_summary(capture_id, summary)
+        for alt in batch_alerts:
+            db.save_alert(capture_id, alt)
+
+    return jsonify({
+        "success": True,
+        "message": f"Loaded sample PCAP with {result['packets_processed']} packets.",
+        "capture_id": capture_id,
+        "filename": filename,
+        "summary": summary,
+    })
+
+
+@api_bp.route("/captures/start", methods=["POST"])
+def start_live_capture():
+    data = request.get_json(silent=True) or {}
+    interface = data.get("interface")
+
+    capture_id = f"live-{uuid.uuid4().hex[:6]}"
+    reset_active_session(capture_id, f"Live [{interface or 'Default'}]", "live")
+
+    res = live_manager.start_capture(
+        interface=interface,
+        capture_id=capture_id,
+        packet_callback=on_packet_received,
+    )
+    if not res.get("success"):
+        return jsonify(res), 400
+
+    return jsonify({
+        "success": True,
+        "message": res.get("message"),
+        "capture_id": capture_id,
+        "interface": interface,
+    })
+
+
+@api_bp.route("/captures/stop", methods=["POST"])
+def stop_live_capture():
+    res = live_manager.stop_capture()
+    with session_lock:
+        if active_session["capture_id"]:
+            summary = active_session["analytics"].get_summary()
+            db = get_db()
+            db.record_session(
+                capture_id=active_session["capture_id"],
+                filename=active_session["filename"],
+                mode="live",
+                packet_count=summary["total_packets"],
+                byte_count=summary["total_bytes"],
+                duration_seconds=summary["capture_duration_seconds"],
+                status="STOPPED",
+            )
+            db.save_summary(active_session["capture_id"], summary)
+
+    return jsonify(res)
+
+
+@api_bp.route("/captures/status", methods=["GET"])
+def capture_status():
+    live_st = live_manager.get_status()
+    with session_lock:
+        return jsonify({
+            "active_mode": active_session["mode"],
+            "capture_id": active_session["capture_id"],
+            "filename": active_session["filename"],
+            "packets_in_memory": len(active_session["packets"]),
+            "live_status": live_st,
+        })
+
+
+@api_bp.route("/captures", methods=["GET"])
+def get_historical_captures():
+    db = get_db()
+    sessions = db.get_sessions()
+    return jsonify({"sessions": sessions})
+
+
+@api_bp.route("/stats", methods=["GET"])
+def get_stats():
+    with session_lock:
+        summary = active_session["analytics"].get_summary()
+        flow_count = active_session["flow_tracker"].get_flow_count()
+        summary["active_flows"] = flow_count
+        return jsonify(summary)
+
+
+@api_bp.route("/protocols", methods=["GET"])
+def get_protocols():
+    with session_lock:
+        dist = active_session["analytics"].get_protocol_distribution()
+        return jsonify(dist)
+
+
+@api_bp.route("/traffic-timeline", methods=["GET"])
+def get_timeline():
+    with session_lock:
+        timeline = active_session["analytics"].get_traffic_timeline()
+        return jsonify({"timeline": timeline})
+
+
+@api_bp.route("/top-talkers", methods=["GET"])
+def get_top_talkers():
+    sort_by = request.args.get("sort_by", "bytes")
+    limit = int(request.args.get("limit", 10))
+    with session_lock:
+        talkers = active_session["analytics"].get_top_talkers(limit=limit, sort_by=sort_by)
+        top_ports = active_session["analytics"].get_top_ports(limit=limit)
+        top_flows = active_session["flow_tracker"].get_top_flows(limit=limit, sort_by=sort_by)
+        return jsonify({
+            "talkers": talkers,
+            "top_ports": top_ports,
+            "top_flows": top_flows,
+        })
+
+
+@api_bp.route("/packets", methods=["GET"])
+def get_packets():
+    """
+    Searchable, filterable, sortable, paginated packets list.
+    Query parameters:
+      - page (int, default 1)
+      - limit (int, default 50)
+      - search (str)
+      - protocol (str)
+      - src_ip (str)
+      - dst_ip (str)
+      - src_port (int)
+      - dst_port (int)
+      - sort_by (str)
+      - sort_order (str, 'asc' or 'desc')
+    """
+    page = max(1, int(request.args.get("page", 1)))
+    limit = min(200, max(1, int(request.args.get("limit", 50))))
+    search = request.args.get("search", "").strip().lower()
+    proto_filter = request.args.get("protocol", "").strip().upper()
+    src_ip = request.args.get("src_ip", "").strip()
+    dst_ip = request.args.get("dst_ip", "").strip()
+    src_port = request.args.get("src_port", type=int)
+    dst_port = request.args.get("dst_port", type=int)
+    sort_by = request.args.get("sort_by", "packet_id")
+    sort_order = request.args.get("sort_order", "asc").lower()
+
+    with session_lock:
+        packets = list(active_session["packets"])
+
+    # Filtering
+    filtered = []
+    for p in packets:
+        if proto_filter and proto_filter not in (
+            (p.get("transport_protocol") or "").upper(),
+            (p.get("network_protocol") or "").upper(),
+            (p.get("application_protocol") or "").upper(),
+        ):
+            continue
+
+        if src_ip and p.get("source_ip") != src_ip:
+            continue
+        if dst_ip and p.get("destination_ip") != dst_ip:
+            continue
+        if src_port is not None and p.get("source_port") != src_port:
+            continue
+        if dst_port is not None and p.get("destination_port") != dst_port:
+            continue
+
+        if search:
+            combined = f"{p.get('source_ip', '')} {p.get('destination_ip', '')} {p.get('network_protocol', '')} {p.get('transport_protocol', '')} {p.get('application_protocol', '')} {p.get('summary', '')}".lower()
+            if search not in combined:
+                continue
+
+        filtered.append(p)
+
+    # Sorting
+    reverse = (sort_order == "desc")
+    if sort_by in ("packet_id", "timestamp", "packet_length", "source_port", "destination_port"):
+        filtered.sort(key=lambda x: (x.get(sort_by) is not None, x.get(sort_by) or 0), reverse=reverse)
+    elif sort_by in ("source_ip", "destination_ip", "network_protocol", "transport_protocol", "application_protocol"):
+        filtered.sort(key=lambda x: str(x.get(sort_by) or ""), reverse=reverse)
+
+    total_count = len(filtered)
+    total_pages = max(1, (total_count + limit - 1) // limit)
+    start_idx = (page - 1) * limit
+    paginated = filtered[start_idx : start_idx + limit]
+
+    # Return slim representation for table performance
+    slim_packets = []
+    for p in paginated:
+        slim_packets.append({
+            "packet_id": p["packet_id"],
+            "timestamp": p["timestamp"],
+            "timestamp_iso": p["timestamp_iso"],
+            "source_ip": p["source_ip"],
+            "destination_ip": p["destination_ip"],
+            "network_protocol": p["network_protocol"],
+            "transport_protocol": p["transport_protocol"],
+            "application_protocol": p["application_protocol"],
+            "source_port": p["source_port"],
+            "destination_port": p["destination_port"],
+            "packet_length": p["packet_length"],
+            "tcp_flags": p["tcp_flags"],
+            "summary": p["summary"],
+            "parsing_status": p["parsing_status"],
+        })
+
+    return jsonify({
+        "total": total_count,
+        "page": page,
+        "limit": limit,
+        "pages": total_pages,
+        "packets": slim_packets,
+    })
+
+
+@api_bp.route("/packets/<int:packet_id>", methods=["GET"])
+def get_packet_details(packet_id: int):
+    with session_lock:
+        for p in active_session["packets"]:
+            if p["packet_id"] == packet_id:
+                return jsonify(p)
+    return jsonify({"error": f"Packet #{packet_id} not found."}), 404
+
+
+@api_bp.route("/alerts", methods=["GET"])
+def get_alerts():
+    detector = get_detector()
+    alerts = detector.get_all_alerts()
+    return jsonify({"alerts": alerts})
+
+
+@api_bp.route("/export/csv", methods=["GET"])
+def export_csv():
+    """Streams CSV of the active filtered dataset."""
+    search = request.args.get("search", "").strip().lower()
+    proto_filter = request.args.get("protocol", "").strip().upper()
+    src_ip = request.args.get("src_ip", "").strip()
+    dst_ip = request.args.get("dst_ip", "").strip()
+
+    with session_lock:
+        packets = list(active_session["packets"])
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        "Packet ID",
+        "Timestamp (ISO)",
+        "Timestamp (Epoch)",
+        "Source IP",
+        "Destination IP",
+        "Source Port",
+        "Destination Port",
+        "Network Protocol",
+        "Transport Protocol",
+        "Application Protocol",
+        "Length (Bytes)",
+        "TCP Flags",
+        "Status",
+        "Summary",
+    ])
+
+    for p in packets:
+        if proto_filter and proto_filter not in (
+            (p.get("transport_protocol") or "").upper(),
+            (p.get("network_protocol") or "").upper(),
+            (p.get("application_protocol") or "").upper(),
+        ):
+            continue
+        if src_ip and p.get("source_ip") != src_ip:
+            continue
+        if dst_ip and p.get("destination_ip") != dst_ip:
+            continue
+        if search:
+            combined = f"{p.get('source_ip', '')} {p.get('destination_ip', '')} {p.get('summary', '')}".lower()
+            if search not in combined:
+                continue
+
+        writer.writerow([
+            p["packet_id"],
+            p["timestamp_iso"],
+            p["timestamp"],
+            p.get("source_ip") or "",
+            p.get("destination_ip") or "",
+            p.get("source_port") or "",
+            p.get("destination_port") or "",
+            p.get("network_protocol") or "",
+            p.get("transport_protocol") or "",
+            p.get("application_protocol") or "",
+            p["packet_length"],
+            ",".join(p.get("tcp_flags", [])),
+            p["parsing_status"],
+            p["summary"],
+        ])
+
+    csv_data = output.getvalue()
+    filename = f"netscope_export_{int(time.time())}.csv"
+    return Response(
+        csv_data,
+        mimetype="text/csv",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )

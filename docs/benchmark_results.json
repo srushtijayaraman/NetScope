@@ -1,0 +1,194 @@
+{
+  "experiment_a": [
+    {
+      "workload": "Small Capture (Sample)",
+      "packets": 60,
+      "file_size_kb": 4.46,
+      "duration_sec": 0.0544,
+      "processing_pps": 1102.22,
+      "memory_rss_mb": 105.02,
+      "errors": 0
+    },
+    {
+      "workload": "Medium Capture (Synthetic)",
+      "packets": 500,
+      "file_size_kb": 126.28,
+      "duration_sec": 0.5017,
+      "processing_pps": 996.59,
+      "memory_rss_mb": 105.98,
+      "errors": 0
+    },
+    {
+      "workload": "Large Capture (Synthetic)",
+      "packets": 2500,
+      "file_size_kb": 288.02,
+      "duration_sec": 4.5746,
+      "processing_pps": 546.49,
+      "memory_rss_mb": 112.31,
+      "errors": 0
+    }
+  ],
+  "experiment_b": [
+    {
+      "metric": "Total Packets",
+      "expected": 4,
+      "actual": 4,
+      "verified": true
+    },
+    {
+      "metric": "Total Bytes",
+      "expected": 1000,
+      "actual": 1000,
+      "verified": true
+    },
+    {
+      "metric": "Average Packet Size (Bytes)",
+      "expected": 250.0,
+      "actual": 250.0,
+      "verified": true
+    },
+    {
+      "metric": "Capture Duration (Seconds)",
+      "expected": 4.0,
+      "actual": 4.0,
+      "verified": true
+    },
+    {
+      "metric": "Capture Rate (PPS)",
+      "expected": 1.0,
+      "actual": 1.0,
+      "verified": true
+    },
+    {
+      "metric": "Throughput (bps)",
+      "expected": 2000.0,
+      "actual": 2000.0,
+      "verified": true
+    },
+    {
+      "metric": "Throughput (kbps)",
+      "expected": 2.0,
+      "actual": 2.0,
+      "verified": true
+    },
+    {
+      "metric": "TCP Protocol Share (%)",
+      "expected": 50.0,
+      "actual": 50.0,
+      "verified": true
+    },
+    {
+      "metric": "UDP Protocol Share (%)",
+      "expected": 25.0,
+      "actual": 25.0,
+      "verified": true
+    },
+    {
+      "metric": "ICMP Protocol Share (%)",
+      "expected": 25.0,
+      "actual": 25.0,
+      "verified": true
+    }
+  ],
+  "experiment_c": [
+    {
+      "query_type": "No Filter (All 60 pkts)",
+      "endpoint": "/api/packets?limit=50",
+      "avg_latency_ms": 1.609,
+      "min_latency_ms": 1.401,
+      "max_latency_ms": 2.96
+    },
+    {
+      "query_type": "Protocol Filter (TCP)",
+      "endpoint": "/api/packets?protocol=TCP&limit=50",
+      "avg_latency_ms": 1.773,
+      "min_latency_ms": 1.479,
+      "max_latency_ms": 2.083
+    },
+    {
+      "query_type": "Protocol Filter (ARP)",
+      "endpoint": "/api/packets?protocol=ARP&limit=50",
+      "avg_latency_ms": 0.964,
+      "min_latency_ms": 0.856,
+      "max_latency_ms": 1.211
+    },
+    {
+      "query_type": "Source IP Filter (10.0.0.99)",
+      "endpoint": "/api/packets?src_ip=10.0.0.99&limit=50",
+      "avg_latency_ms": 1.413,
+      "min_latency_ms": 1.241,
+      "max_latency_ms": 1.919
+    },
+    {
+      "query_type": "Search String (who-has)",
+      "endpoint": "/api/packets?search=who-has&limit=50",
+      "avg_latency_ms": 1.037,
+      "min_latency_ms": 0.383,
+      "max_latency_ms": 3.626
+    },
+    {
+      "query_type": "Combined Filter (TCP + 10.0.0.88)",
+      "endpoint": "/api/packets?protocol=TCP&src_ip=10.0.0.88&limit=50",
+      "avg_latency_ms": 1.228,
+      "min_latency_ms": 1.009,
+      "max_latency_ms": 1.802
+    }
+  ],
+  "experiment_d": [
+    {
+      "endpoint_name": "Health Check",
+      "path": "/api/health",
+      "avg_ms": 0.711,
+      "min_ms": 0.547,
+      "max_ms": 0.977
+    },
+    {
+      "endpoint_name": "Summary Statistics",
+      "path": "/api/stats",
+      "avg_ms": 0.775,
+      "min_ms": 0.647,
+      "max_ms": 1.122
+    },
+    {
+      "endpoint_name": "Protocol Breakdown",
+      "path": "/api/protocols",
+      "avg_ms": 0.727,
+      "min_ms": 0.652,
+      "max_ms": 1.098
+    },
+    {
+      "endpoint_name": "Traffic Timeline",
+      "path": "/api/traffic-timeline",
+      "avg_ms": 0.795,
+      "min_ms": 0.612,
+      "max_ms": 1.212
+    },
+    {
+      "endpoint_name": "Top Talkers & Flows",
+      "path": "/api/top-talkers",
+      "avg_ms": 1.449,
+      "min_ms": 1.072,
+      "max_ms": 2.262
+    },
+    {
+      "endpoint_name": "Security Alerts",
+      "path": "/api/alerts",
+      "avg_ms": 1.09,
+      "min_ms": 0.728,
+      "max_ms": 2.447
+    },
+    {
+      "endpoint_name": "CSV Export",
+      "path": "/api/export/csv",
+      "avg_ms": 1.54,
+      "min_ms": 1.462,
+      "max_ms": 1.838
+    }
+  ],
+  "experiment_e": {
+    "os_platform": "win32",
+    "supported": false,
+    "reason": "Npcap/WinPcap driver is not installed on this Windows host.",
+    "solution": "Download and install Npcap with 'WinPcap API-compatible mode' enabled from https://npcap.com."
+  }
+}
