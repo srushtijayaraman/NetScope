@@ -12,19 +12,48 @@
 
 ---
 
-## NetScope 3.0 Visual Interface Gallery
+<p align="center">
+  <img src="docs/screenshots/dashboard_dark.png" alt="NetScope 3.0 Real-Time Packet Analyzer Dashboard" width="95%" />
+</p>
 
-| TCP Conversation Inspector (Ladder Progression) | Differential Capture Comparison |
-|:---:|:---:|
-| ![TCP Conversation Inspector](docs/screenshots/tcp_conversation_inspector.png) | ![Capture Comparison](docs/screenshots/capture_comparison.png) |
+<p align="center">
+  <em>NetScope 3.0 real-time dashboard showing live KPI metrics, protocol breakdown, traffic timeline, heuristic alerts, and interactive packet stream.</em>
+</p>
 
-| Self-Contained HTML Intelligence Report | Dark Theme Dashboard Overview |
-|:---:|:---:|
-| ![HTML Report Preview](docs/screenshots/html_report_preview.png) | ![NetScope Dark Theme Dashboard](docs/screenshots/dashboard_dark.png) |
+<details>
+<summary><b>📸 Click to preview additional screenshots (TCP Conversation Inspector, PCAP Comparison, Light Theme, HTML Report)</b></summary>
+<br>
 
-| Light Theme (Auditorium & Print Mode) | Deep Packet Protocol Inspector |
-|:---:|:---:|
-| ![NetScope Light Theme Dashboard](docs/screenshots/dashboard_light.png) | ![Packet Inspector Modal](docs/screenshots/packet_inspector_modal.png) |
+<p align="center">
+  <b>TCP Conversation Inspector (Chronological Ladder & State Tracking)</b><br>
+  <img src="docs/screenshots/tcp_conversation_inspector.png" width="92%" alt="TCP Conversation Inspector" />
+</p>
+<br>
+
+<p align="center">
+  <b>Differential Capture Comparison (Side-by-Side PCAP Analysis)</b><br>
+  <img src="docs/screenshots/capture_comparison.png" width="92%" alt="Differential Capture Comparison" />
+</p>
+<br>
+
+<p align="center">
+  <b>Deep Packet Protocol Inspector (Multi-Layer Decoded View & TCP Flags)</b><br>
+  <img src="docs/screenshots/packet_inspector_modal.png" width="92%" alt="Packet Inspector" />
+</p>
+<br>
+
+<p align="center">
+  <b>Light Theme Dashboard (High-Contrast Auditorium & Print Mode)</b><br>
+  <img src="docs/screenshots/dashboard_light.png" width="92%" alt="Light Theme Dashboard" />
+</p>
+<br>
+
+<p align="center">
+  <b>Self-Contained Standalone HTML Intelligence Report</b><br>
+  <img src="docs/screenshots/html_report_preview.png" width="92%" alt="HTML Report Preview" />
+</p>
+
+</details>
 
 ---
 
