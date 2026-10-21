@@ -20,41 +20,6 @@
   <em>NetScope 3.0 real-time dashboard showing live KPI metrics, protocol breakdown, traffic timeline, heuristic alerts, and interactive packet stream.</em>
 </p>
 
-<details>
-<summary><b>📸 Click to preview additional screenshots (TCP Conversation Inspector, PCAP Comparison, Light Theme, HTML Report)</b></summary>
-<br>
-
-<p align="center">
-  <b>TCP Conversation Inspector (Chronological Ladder & State Tracking)</b><br>
-  <img src="docs/screenshots/tcp_conversation_inspector.png" width="92%" alt="TCP Conversation Inspector" />
-</p>
-<br>
-
-<p align="center">
-  <b>Differential Capture Comparison (Side-by-Side PCAP Analysis)</b><br>
-  <img src="docs/screenshots/capture_comparison.png" width="92%" alt="Differential Capture Comparison" />
-</p>
-<br>
-
-<p align="center">
-  <b>Deep Packet Protocol Inspector (Multi-Layer Decoded View & TCP Flags)</b><br>
-  <img src="docs/screenshots/packet_inspector_modal.png" width="92%" alt="Packet Inspector" />
-</p>
-<br>
-
-<p align="center">
-  <b>Light Theme Dashboard (High-Contrast Auditorium & Print Mode)</b><br>
-  <img src="docs/screenshots/dashboard_light.png" width="92%" alt="Light Theme Dashboard" />
-</p>
-<br>
-
-<p align="center">
-  <b>Self-Contained Standalone HTML Intelligence Report</b><br>
-  <img src="docs/screenshots/html_report_preview.png" width="92%" alt="HTML Report Preview" />
-</p>
-
-</details>
-
 ---
 
 ## 1. Project Overview & Highlights
