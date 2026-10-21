@@ -71,6 +71,51 @@ def test_csv_export_with_filters(client):
     lines = res.data.decode("utf-8").strip().split("\r\n")
     # Header + 2 ARP packets
     assert len(lines) == 3
-    assert "Packet ID,Timestamp (ISO)" in lines[0]
+    assert "Packet ID" in lines[0]
+    assert "Flow ID" in lines[0]
+    assert "Timestamp (ISO)" in lines[0]
     assert "ARP" in lines[1]
     assert "ARP" in lines[2]
+
+
+def test_filters_by_ports_packet_id_and_flow(client):
+    client.post("/api/captures/load-sample")
+
+    # Filter by specific packet_id
+    res_pkt = client.get("/api/packets?packet_id=5")
+    assert res_pkt.status_code == 200
+    assert res_pkt.json["total"] == 1
+    assert res_pkt.json["packets"][0]["packet_id"] == 5
+
+    # Filter by dst_port 80
+    res_port = client.get("/api/packets?dst_port=80")
+    assert res_port.status_code == 200
+    assert res_port.json["total"] > 0
+    for p in res_port.json["packets"]:
+        assert p["destination_port"] == 80
+
+    # Test Flow API and flow_id filtering
+    res_flows = client.get("/api/flows")
+    assert res_flows.status_code == 200
+    flows = res_flows.json["flows"]
+    assert len(flows) > 0
+    sample_flow = flows[0]
+    flow_id = sample_flow["flow_id"]
+
+    # Retrieve flow details
+    res_fdetail = client.get(f"/api/flows/{flow_id}")
+    assert res_fdetail.status_code == 200
+    assert res_fdetail.json["flow_id"] == flow_id
+    assert "packet_ids" in res_fdetail.json
+
+    # Filter packets by flow_id
+    res_fpkts = client.get(f"/api/packets?flow_id={flow_id}")
+    assert res_fpkts.status_code == 200
+    assert res_fpkts.json["total"] == sample_flow["packet_count"]
+    for p in res_fpkts.json["packets"]:
+        assert p["flow_id"] == flow_id
+
+    # 404 for unknown flow
+    res_f404 = client.get("/api/flows/nonexistent-flow-id")
+    assert res_f404.status_code == 404
+

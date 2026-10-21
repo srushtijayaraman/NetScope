@@ -4,11 +4,11 @@
 - **Execution Date**: 2026-10-21
 - **Platform**: Windows 11 (NT 10.0.26300.0), Python 3.13.2 (64-bit)
 - **Test Framework**: `pytest-9.1.1`, `pluggy-1.7.0`
-- **Total Tests Discovered**: 34
-- **Tests Passed**: 34 (100.0%)
+- **Total Tests Discovered**: 41
+- **Tests Passed**: 41 (100.0%)
 - **Tests Failed**: 0
 - **Tests Skipped**: 0
-- **Total Execution Time**: 0.40 seconds
+- **Total Execution Time**: 1.07 seconds
 
 ---
 
@@ -17,10 +17,13 @@
 ### A. Anomaly Detection (`tests/test_anomaly_detector.py`)
 | Test ID | Test Name | Status | Verified Outcome |
 |---|---|---|---|
-| TC-ALT-01 | `test_syn_flood_rule_triggered` | **PASSED** | Correctly triggers alert upon 5th SYN in window; ignores below threshold |
-| TC-ALT-02 | `test_syn_flood_cooldown` | **PASSED** | Suppresses immediate duplicate alerts within 5s cooldown window |
-| TC-ALT-03 | `test_port_scan_rule_triggered` | **PASSED** | Detects probing of $\ge 4$ distinct ports by single IP |
-| TC-ALT-04 | `test_batch_dominant_host_rule` | **PASSED** | Flags source IP accounting for $>50\%$ of overall traffic volume |
+| TC-ALT-01 | `test_normal_benign_traffic_no_alerts` | **PASSED** | Normal 3-way handshakes and single-port HTTP GET/200 OK generate zero false-positive alerts |
+| TC-ALT-02 | `test_false_positive_single_port_repeated_requests` | **PASSED** | Rapid consecutive requests to a single web port (port 80) do NOT trigger port scan alerts |
+| TC-ALT-03 | `test_syn_flood_rule_with_packet_references` | **PASSED** | Triggers alert on 5th standalone SYN with complete supporting packet reference list `[1, 2, 3, 4, 5]` |
+| TC-ALT-04 | `test_syn_flood_cooldown` | **PASSED** | Suppresses immediate duplicate alerts within cooldown window |
+| TC-ALT-05 | `test_port_scan_rule_triggered_with_references` | **PASSED** | Flags probing of $\ge 4$ distinct ports with packet ID references |
+| TC-ALT-06 | `test_dynamic_threshold_reconfiguration` | **PASSED** | Dynamically modifies thresholds at runtime; verifies new threshold enforcement |
+| TC-ALT-07 | `test_batch_dominant_host_rule` | **PASSED** | Flags source IP accounting for $>50\%$ of overall traffic volume as observable fact |
 
 ### B. REST API Endpoints (`tests/test_api.py`)
 | Test ID | Test Name | Status | Verified Outcome |
@@ -29,13 +32,15 @@
 | TC-API-02 | `test_api_interfaces` | **PASSED** | Enumerates network interfaces and accurately reports driver state |
 | TC-API-03 | `test_upload_invalid_extension` | **PASSED** | Rejects non-PCAP file (`.exe`) with HTTP 400 Bad Request |
 | TC-API-04 | `test_upload_missing_file` | **PASSED** | Returns HTTP 400 when multipart request lacks file payload |
-| TC-API-05 | `test_load_sample_and_inspect_metrics`| **PASSED** | Loads 60-packet sample and validates stats, protocols, timeline, alerts, and 404s |
+| TC-API-05 | `test_load_sample_and_inspect_metrics`| **PASSED** | Loads 60-packet sample and validates stats, protocols, timeline, alerts, flows, and 404s |
+| TC-API-06 | `test_alerts_config_api` | **PASSED** | Verifies `GET /api/alerts/config`, `POST /api/alerts/config`, and rejection of malformed JSON with HTTP 400 |
 
-### C. Filtering, Pagination & Export (`tests/test_filters.py`)
+### C. Filtering, Flow Tracking & Export (`tests/test_filters.py`)
 | Test ID | Test Name | Status | Verified Outcome |
 |---|---|---|---|
 | TC-FILT-01 | `test_packet_filtering_workflow` | **PASSED** | Verifies filtering by protocol (ARP/DNS), source IP, search string, and disjoint pagination |
-| TC-FILT-02 | `test_csv_export_with_filters` | **PASSED** | Streams valid RFC 4180 CSV containing only filtered records |
+| TC-FILT-02 | `test_csv_export_with_filters` | **PASSED** | Streams valid RFC 4180 CSV containing Flow ID, Relative Time, and filtered records |
+| TC-FILT-03 | `test_filters_by_ports_packet_id_and_flow` | **PASSED** | Verifies exact query filtering by `packet_id`, `dst_port`, `flow_id`, and flow detail lookup |
 
 ### D. Capture Lifecycle & Queue Stress (`tests/test_lifecycle.py`)
 | Test ID | Test Name | Status | Verified Outcome |
@@ -58,6 +63,8 @@
 | TC-PARSE-08 | `test_parse_tls_handshake_payload` | **PASSED** | Identifies TLS record byte `0x16 0x03` as TLS |
 | TC-PARSE-09 | `test_tcp_flag_decoder` | **PASSED** | Decodes raw bitmask `0x12` into `['SYN', 'ACK']` |
 | TC-PARSE-10 | `test_defensive_missing_fields` | **PASSED** | Safely parses raw payloads without IP/port headers |
+| TC-PARSE-11 | `test_parse_dns_query_and_response_details` | **PASSED** | Extracts DNS transaction ID, query type names, response codes, and decoded answer records |
+| TC-PARSE-12 | `test_parse_corrupt_packet_safe` | **PASSED** | Gracefully handles non-packet corrupted inputs without crashing, returning `Malformed` |
 
 ### F. PCAP Reader (`tests/test_pcap_reader.py`)
 | Test ID | Test Name | Status | Verified Outcome |
@@ -79,8 +86,11 @@
 ---
 
 ## 3. Defects Discovered & Remediations Applied
-During development, the test suite revealed two defects that were immediately rectified:
 1. **Windows Temporary File Lock**: `NamedTemporaryFile` in Windows holds a mandatory OS-level file lock, causing `PermissionError: [WinError 32]` when Scapy or the test cleanup attempted to delete the temporary PCAP.
    - *Remediation*: Explicitly called `tf.close()` prior to ingestion, and ensured `PcapReader` file descriptors are cleanly wrapped in `try...finally` blocks.
 2. **In-Memory SQLite Multi-Connection Volatility**: Setting `DATABASE_PATH = ":memory:"` created isolated databases per connection, leading to `sqlite3.OperationalError: no such table: sessions`.
    - *Remediation*: Updated `TestConfig` to use a thread-isolated test SQLite file (`netscope_test_<pid>.db`), ensuring table schemas persist reliably across request contexts.
+3. **Scapy 2.8 PacketListField DNS Deprecation Warning**: Accessing `.qd` or `.an` on DNS packets in Scapy 2.8 emitted deprecation warnings.
+   - *Remediation*: Utilized payload chaining and indexed access with upstream warning filtering in `pytest.ini`.
+4. **Distinction of Heuristic Alerts vs Observable Facts**: Alert titles previously implied definitive security intrusions without stating heuristic bounds.
+   - *Remediation*: Prefixed with `Heuristic: ... (Unconfirmed)` or `Observation: ...`, attaching exact time window, threshold, observed value, and supporting packet references.

@@ -340,6 +340,46 @@ def get_top_talkers():
         })
 
 
+@api_bp.route("/flows", methods=["GET"])
+def get_flows():
+    """Returns top active flows with summary statistics."""
+    sort_by = request.args.get("sort_by", "bytes")
+    limit = int(request.args.get("limit", 20))
+    with session_lock:
+        flows = active_session["flow_tracker"].get_top_flows(limit=limit, sort_by=sort_by)
+        return jsonify({
+            "total_flows": active_session["flow_tracker"].get_flow_count(),
+            "flows": flows,
+        })
+
+
+@api_bp.route("/flows/<flow_id>", methods=["GET"])
+def get_flow_detail(flow_id: str):
+    """Returns detailed information for a specific flow including packet references."""
+    with session_lock:
+        flow = active_session["flow_tracker"].get_flow_by_id(flow_id)
+        if not flow:
+            return jsonify({"error": f"Flow '{flow_id}' not found."}), 404
+        return jsonify(flow)
+
+
+@api_bp.route("/alerts/config", methods=["GET", "POST"])
+def alert_config():
+    """Inspects or updates heuristic anomaly detection thresholds."""
+    detector = get_detector()
+    if request.method == "POST":
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify({"error": "Invalid JSON body. Expected key-value object."}), 400
+        updated = detector.update_thresholds(data)
+        return jsonify({
+            "success": True,
+            "message": "Thresholds updated successfully.",
+            "thresholds": updated,
+        })
+    return jsonify({"thresholds": detector.get_thresholds()})
+
+
 @api_bp.route("/packets", methods=["GET"])
 def get_packets():
     """
@@ -353,6 +393,8 @@ def get_packets():
       - dst_ip (str)
       - src_port (int)
       - dst_port (int)
+      - packet_id (int)
+      - flow_id (str)
       - sort_by (str)
       - sort_order (str, 'asc' or 'desc')
     """
@@ -364,6 +406,8 @@ def get_packets():
     dst_ip = request.args.get("dst_ip", "").strip()
     src_port = request.args.get("src_port", type=int)
     dst_port = request.args.get("dst_port", type=int)
+    pkt_id_filter = request.args.get("packet_id", type=int)
+    flow_id_filter = request.args.get("flow_id", "").strip()
     sort_by = request.args.get("sort_by", "packet_id")
     sort_order = request.args.get("sort_order", "asc").lower()
 
@@ -373,6 +417,12 @@ def get_packets():
     # Filtering
     filtered = []
     for p in packets:
+        if pkt_id_filter is not None and p.get("packet_id") != pkt_id_filter:
+            continue
+
+        if flow_id_filter and p.get("flow_id") != flow_id_filter:
+            continue
+
         if proto_filter and proto_filter not in (
             (p.get("transport_protocol") or "").upper(),
             (p.get("network_protocol") or "").upper(),
@@ -390,7 +440,7 @@ def get_packets():
             continue
 
         if search:
-            combined = f"{p.get('source_ip', '')} {p.get('destination_ip', '')} {p.get('network_protocol', '')} {p.get('transport_protocol', '')} {p.get('application_protocol', '')} {p.get('summary', '')}".lower()
+            combined = f"{p.get('packet_id', '')} {p.get('source_ip', '')} {p.get('destination_ip', '')} {p.get('network_protocol', '')} {p.get('transport_protocol', '')} {p.get('application_protocol', '')} {p.get('summary', '')} {p.get('flow_id', '')}".lower()
             if search not in combined:
                 continue
 
@@ -400,7 +450,7 @@ def get_packets():
     reverse = (sort_order == "desc")
     if sort_by in ("packet_id", "timestamp", "packet_length", "source_port", "destination_port"):
         filtered.sort(key=lambda x: (x.get(sort_by) is not None, x.get(sort_by) or 0), reverse=reverse)
-    elif sort_by in ("source_ip", "destination_ip", "network_protocol", "transport_protocol", "application_protocol"):
+    elif sort_by in ("source_ip", "destination_ip", "network_protocol", "transport_protocol", "application_protocol", "flow_id"):
         filtered.sort(key=lambda x: str(x.get(sort_by) or ""), reverse=reverse)
 
     total_count = len(filtered)
@@ -413,8 +463,10 @@ def get_packets():
     for p in paginated:
         slim_packets.append({
             "packet_id": p["packet_id"],
+            "flow_id": p.get("flow_id"),
             "timestamp": p["timestamp"],
             "timestamp_iso": p["timestamp_iso"],
+            "relative_time_sec": p.get("relative_time_sec", 0.0),
             "source_ip": p["source_ip"],
             "destination_ip": p["destination_ip"],
             "network_protocol": p["network_protocol"],
@@ -427,6 +479,14 @@ def get_packets():
             "summary": p["summary"],
             "parsing_status": p["parsing_status"],
         })
+
+    return jsonify({
+        "total": total_count,
+        "page": page,
+        "limit": limit,
+        "pages": total_pages,
+        "packets": slim_packets,
+    })
 
     return jsonify({
         "total": total_count,
@@ -460,6 +520,10 @@ def export_csv():
     proto_filter = request.args.get("protocol", "").strip().upper()
     src_ip = request.args.get("src_ip", "").strip()
     dst_ip = request.args.get("dst_ip", "").strip()
+    src_port = request.args.get("src_port", type=int)
+    dst_port = request.args.get("dst_port", type=int)
+    pkt_id_filter = request.args.get("packet_id", type=int)
+    flow_id_filter = request.args.get("flow_id", "").strip()
 
     with session_lock:
         packets = list(active_session["packets"])
@@ -468,8 +532,10 @@ def export_csv():
     writer = csv.writer(output)
     writer.writerow([
         "Packet ID",
+        "Flow ID",
         "Timestamp (ISO)",
         "Timestamp (Epoch)",
+        "Relative Time (s)",
         "Source IP",
         "Destination IP",
         "Source Port",
@@ -484,6 +550,10 @@ def export_csv():
     ])
 
     for p in packets:
+        if pkt_id_filter is not None and p.get("packet_id") != pkt_id_filter:
+            continue
+        if flow_id_filter and p.get("flow_id") != flow_id_filter:
+            continue
         if proto_filter and proto_filter not in (
             (p.get("transport_protocol") or "").upper(),
             (p.get("network_protocol") or "").upper(),
@@ -494,15 +564,21 @@ def export_csv():
             continue
         if dst_ip and p.get("destination_ip") != dst_ip:
             continue
+        if src_port is not None and p.get("source_port") != src_port:
+            continue
+        if dst_port is not None and p.get("destination_port") != dst_port:
+            continue
         if search:
-            combined = f"{p.get('source_ip', '')} {p.get('destination_ip', '')} {p.get('summary', '')}".lower()
+            combined = f"{p.get('packet_id', '')} {p.get('source_ip', '')} {p.get('destination_ip', '')} {p.get('summary', '')} {p.get('flow_id', '')}".lower()
             if search not in combined:
                 continue
 
         writer.writerow([
             p["packet_id"],
+            p.get("flow_id") or "",
             p["timestamp_iso"],
             p["timestamp"],
+            p.get("relative_time_sec", 0.0),
             p.get("source_ip") or "",
             p.get("destination_ip") or "",
             p.get("source_port") or "",

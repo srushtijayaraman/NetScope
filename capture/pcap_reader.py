@@ -46,13 +46,16 @@ class OfflinePcapProcessor:
 
         reader = None
         f = None
+        base_timestamp = None
         try:
             f = open(filepath, "rb")
             reader = PcapReader(f)
             for pkt in reader:
                 packet_count += 1
                 try:
-                    record = parse_packet(pkt, packet_id=packet_count, capture_id=capture_id)
+                    if base_timestamp is None and getattr(pkt, "time", None) is not None:
+                        base_timestamp = float(pkt.time)
+                    record = parse_packet(pkt, packet_id=packet_count, capture_id=capture_id, base_timestamp=base_timestamp)
                     if packet_callback:
                         packet_callback(record)
                     if len(records_sample) < self.max_packets_memory:

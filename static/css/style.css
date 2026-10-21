@@ -649,6 +649,26 @@ body {
     font-weight: 500;
 }
 
+.filter-link, .filter-port-link {
+    color: var(--accent-blue);
+    text-decoration: none;
+    cursor: pointer;
+}
+.filter-link:hover, .filter-port-link:hover {
+    text-decoration: underline;
+}
+
+.alert-pkt-link {
+    font-size: 11px;
+    font-family: var(--font-mono);
+}
+
+.btn-filter-flow {
+    padding: 2px 6px;
+    font-size: 10px;
+    border-radius: 4px;
+}
+
 /* Footer */
 .app-footer {
     border-top: 1px solid var(--border-color);

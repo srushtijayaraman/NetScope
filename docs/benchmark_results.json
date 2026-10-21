@@ -4,27 +4,27 @@
       "workload": "Small Capture (Sample)",
       "packets": 60,
       "file_size_kb": 4.46,
-      "duration_sec": 0.0544,
-      "processing_pps": 1102.22,
-      "memory_rss_mb": 105.02,
+      "duration_sec": 0.0218,
+      "processing_pps": 2750.25,
+      "memory_rss_mb": 104.7,
       "errors": 0
     },
     {
       "workload": "Medium Capture (Synthetic)",
       "packets": 500,
       "file_size_kb": 126.28,
-      "duration_sec": 0.5017,
-      "processing_pps": 996.59,
-      "memory_rss_mb": 105.98,
+      "duration_sec": 0.3147,
+      "processing_pps": 1588.92,
+      "memory_rss_mb": 106.26,
       "errors": 0
     },
     {
       "workload": "Large Capture (Synthetic)",
       "packets": 2500,
       "file_size_kb": 288.02,
-      "duration_sec": 4.5746,
-      "processing_pps": 546.49,
-      "memory_rss_mb": 112.31,
+      "duration_sec": 1.7543,
+      "processing_pps": 1425.06,
+      "memory_rss_mb": 112.73,
       "errors": 0
     }
   ],
@@ -94,95 +94,109 @@
     {
       "query_type": "No Filter (All 60 pkts)",
       "endpoint": "/api/packets?limit=50",
-      "avg_latency_ms": 1.609,
-      "min_latency_ms": 1.401,
-      "max_latency_ms": 2.96
+      "avg_latency_ms": 0.809,
+      "min_latency_ms": 0.574,
+      "max_latency_ms": 1.604
     },
     {
       "query_type": "Protocol Filter (TCP)",
       "endpoint": "/api/packets?protocol=TCP&limit=50",
-      "avg_latency_ms": 1.773,
-      "min_latency_ms": 1.479,
-      "max_latency_ms": 2.083
+      "avg_latency_ms": 0.744,
+      "min_latency_ms": 0.574,
+      "max_latency_ms": 1.196
     },
     {
       "query_type": "Protocol Filter (ARP)",
       "endpoint": "/api/packets?protocol=ARP&limit=50",
-      "avg_latency_ms": 0.964,
-      "min_latency_ms": 0.856,
-      "max_latency_ms": 1.211
+      "avg_latency_ms": 0.399,
+      "min_latency_ms": 0.284,
+      "max_latency_ms": 0.713
     },
     {
       "query_type": "Source IP Filter (10.0.0.99)",
       "endpoint": "/api/packets?src_ip=10.0.0.99&limit=50",
-      "avg_latency_ms": 1.413,
-      "min_latency_ms": 1.241,
-      "max_latency_ms": 1.919
+      "avg_latency_ms": 0.579,
+      "min_latency_ms": 0.423,
+      "max_latency_ms": 1.323
     },
     {
       "query_type": "Search String (who-has)",
       "endpoint": "/api/packets?search=who-has&limit=50",
-      "avg_latency_ms": 1.037,
-      "min_latency_ms": 0.383,
-      "max_latency_ms": 3.626
+      "avg_latency_ms": 0.348,
+      "min_latency_ms": 0.283,
+      "max_latency_ms": 0.488
     },
     {
       "query_type": "Combined Filter (TCP + 10.0.0.88)",
       "endpoint": "/api/packets?protocol=TCP&src_ip=10.0.0.88&limit=50",
-      "avg_latency_ms": 1.228,
-      "min_latency_ms": 1.009,
-      "max_latency_ms": 1.802
+      "avg_latency_ms": 0.58,
+      "min_latency_ms": 0.402,
+      "max_latency_ms": 0.872
     }
   ],
   "experiment_d": [
     {
       "endpoint_name": "Health Check",
       "path": "/api/health",
-      "avg_ms": 0.711,
-      "min_ms": 0.547,
-      "max_ms": 0.977
+      "avg_ms": 0.294,
+      "min_ms": 0.256,
+      "max_ms": 0.436
     },
     {
       "endpoint_name": "Summary Statistics",
       "path": "/api/stats",
-      "avg_ms": 0.775,
-      "min_ms": 0.647,
-      "max_ms": 1.122
+      "avg_ms": 0.345,
+      "min_ms": 0.291,
+      "max_ms": 0.456
     },
     {
       "endpoint_name": "Protocol Breakdown",
       "path": "/api/protocols",
-      "avg_ms": 0.727,
-      "min_ms": 0.652,
-      "max_ms": 1.098
+      "avg_ms": 0.265,
+      "min_ms": 0.237,
+      "max_ms": 0.355
     },
     {
       "endpoint_name": "Traffic Timeline",
       "path": "/api/traffic-timeline",
-      "avg_ms": 0.795,
-      "min_ms": 0.612,
-      "max_ms": 1.212
+      "avg_ms": 0.331,
+      "min_ms": 0.228,
+      "max_ms": 0.531
     },
     {
       "endpoint_name": "Top Talkers & Flows",
       "path": "/api/top-talkers",
-      "avg_ms": 1.449,
-      "min_ms": 1.072,
-      "max_ms": 2.262
+      "avg_ms": 0.675,
+      "min_ms": 0.562,
+      "max_ms": 1.296
+    },
+    {
+      "endpoint_name": "Active Flows",
+      "path": "/api/flows",
+      "avg_ms": 0.681,
+      "min_ms": 0.513,
+      "max_ms": 0.888
     },
     {
       "endpoint_name": "Security Alerts",
       "path": "/api/alerts",
-      "avg_ms": 1.09,
-      "min_ms": 0.728,
-      "max_ms": 2.447
+      "avg_ms": 0.436,
+      "min_ms": 0.333,
+      "max_ms": 0.534
+    },
+    {
+      "endpoint_name": "Alert Config",
+      "path": "/api/alerts/config",
+      "avg_ms": 0.335,
+      "min_ms": 0.289,
+      "max_ms": 0.429
     },
     {
       "endpoint_name": "CSV Export",
       "path": "/api/export/csv",
-      "avg_ms": 1.54,
-      "min_ms": 1.462,
-      "max_ms": 1.838
+      "avg_ms": 0.889,
+      "min_ms": 0.624,
+      "max_ms": 1.754
     }
   ],
   "experiment_e": {

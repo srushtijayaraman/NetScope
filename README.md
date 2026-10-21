@@ -3,7 +3,7 @@
 [![Python](https://img.shields.io/badge/Python-3.13-blue.svg)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.1.3-green.svg)](https://flask.palletsprojects.com/)
 [![Scapy](https://img.shields.io/badge/Scapy-2.8.0-red.svg)](https://scapy.net/)
-[![Tests](https://img.shields.io/badge/Tests-34%20Passed-emerald.svg)](docs/test_report.md)
+[![Tests](https://img.shields.io/badge/Tests-41%20Passed-emerald.svg)](docs/test_report.md)
 [![Academic](https://img.shields.io/badge/Category-Computer%20Networks%20Mini--Project-purple.svg)]()
 
 > **Computer Networks Laboratory Mini-Project Deliverable**  
@@ -12,16 +12,19 @@
 ---
 
 ## 1. Project Overview & Highlights
-NetScope ingests network packet captures (offline `.pcap` / `.pcapng` files and live network interfaces), parses multi-layer protocols, computes academically verified traffic metrics, detects stateful security anomalies (SYN floods, port scans), and visualizes the results on an interactive web dashboard with zero external CDN dependencies.
+NetScope ingests network packet captures (offline `.pcap` / `.pcapng` files and live network interfaces), parses multi-layer protocols, computes academically verified traffic metrics, detects stateful security anomalies (SYN floods, port scans), groups conversations into 5-tuple flows, and visualizes the results on an interactive web dashboard with zero external CDN dependencies.
 
 ### Core Features:
-- **Offline PCAP Ingestion**: Incremental, memory-bounded reading of PCAP/PCAPNG captures with stream closure guarantees.
-- **Protocol Decoding**: Detailed extraction across Ethernet, ARP, IPv4, IPv6, TCP, UDP, ICMP, DNS, HTTP, and TLS.
+- **Offline PCAP Ingestion**: Incremental, memory-bounded reading of PCAP/PCAPNG captures with stream closure guarantees and sub-millisecond parsing.
+- **Deep Protocol Decoding**: Detailed multi-layer extraction across Ethernet, ARP, IPv4, IPv6, TCP, UDP, ICMP, DNS, HTTP, and TLS.
+  - **Comprehensive DNS Parsing**: Decodes transaction ID, query names, query type names (`A`, `AAAA`, `CNAME`, `MX`, `TXT`, `PTR`, `NS`, `SOA`), flags (`AA`, `TC`, `RD`, `RA`), response codes (`NOERROR`, `NXDOMAIN`, `SERVFAIL`), and answer records.
 - **Strict Classification**: Validates application-layer payload byte signatures (HTTP verbs, TLS record headers) rather than guessing from port numbers alone.
-- **Deterministic Analytics**: Throughput (bps/kbps/Mbps), packets-per-second (PPS), average packet size, capture duration, protocol percentages, and chronological time buckets.
-- **Canonical Flow Tracking**: Symmetric 5-tuples `(IP A, IP B, Protocol, Port A, Port B)` tracking bidirectional volumes and TCP states (`SYN_SENT`, `SYN_ACK`, `ESTABLISHED`, `RESET`, `CLOSED`).
-- **Explainable Anomaly Alerts**: Heuristic detection for TCP SYN floods, horizontal/vertical port scans, packet rate spikes, and dominant traffic hosts with cooldown deduplication.
-- **Packet Explorer**: High-performance grid with sub-2ms search, combinable protocol/IP/port filters, pagination, click-to-inspect detail modal, and RFC 4180 CSV export.
+- **Deterministic Analytics**: Throughput (bps/kbps/Mbps), packets-per-second (PPS), average packet size, capture duration, protocol percentages, relative timing from $t_0 = 0.000\text{s}$, and chronological time buckets.
+- **Canonical Flow Tracking**: Symmetric 5-tuples `(IP A, IP B, Protocol, Port A, Port B)` tracking bidirectional conversations, forward/reverse volumes, inter-arrival durations, TCP connection states (`SYN_SENT`, `SYN_ACK`, `ESTABLISHED`, `RESET`, `CLOSING`, `CLOSED`), and per-flow packet filtering.
+- **Explainable Anomaly Alerts**: Heuristic detection distinguishing observable traffic facts from unconfirmed suspicions. Flags rapid SYN bursts, vertical/horizontal multi-port scans, packet rate spikes, and dominant hosts. Every alert attaches exact observed values, thresholds, sliding time windows, and supporting packet references.
+- **Dynamic Threshold Configuration**: Runtime threshold adjustment modal and API (`GET/POST /api/alerts/config`) enabling instant tuning without restarting the server.
+- **Packet Explorer**: High-performance grid with sub-millisecond search, combinable protocol/IP/port/packet ID/flow ID filters, pagination, click-to-inspect detail modal, and RFC 4180 CSV export.
+- **Defensive Robustness**: Gracefully handles malformed, truncated, or unhandled packets without crashing, labeling them as `Malformed` with diagnostic reasons.
 - **Offline Readiness**: Self-contained frontend bundle with local Plotly.js (`plotly.min.js`), requiring no active internet connection.
 
 ---
@@ -33,6 +36,7 @@ netscope/
 │   app.py                      # Flask Application entry point
 │   config.py                   # Environment configuration & limits
 │   requirements.txt            # Pinned dependency manifest
+│   pytest.ini                  # Pytest configuration & warning filters
 │   benchmark_experiments.py    # Automated performance & correctness suite
 │   README.md                   # Comprehensive documentation & setup
 │   .gitignore                  # Git ignore rules
@@ -45,14 +49,14 @@ netscope/
 │
 ├── analyzer/                   # Parsing & Classification Subsystem
 │   │   __init__.py
-│   │   parser.py               # Normalized multi-layer packet decoder
+│   │   parser.py               # Normalized multi-layer packet decoder & DNS parser
 │   │   protocol_classifier.py  # Payload inspection & protocol identification
 │   │   flow_tracker.py         # Bidirectional 5-tuple flow & TCP state tracker
 │
 ├── analytics/                  # Traffic Analytics & Heuristics
 │   │   __init__.py
 │   │   statistics.py           # Throughput, PPS, averages & time-series
-│   │   anomaly_detector.py     # SYN flood, port scan & volumetric alert rules
+│   │   anomaly_detector.py     # Configurable SYN flood, port scan & rate alert rules
 │
 ├── storage/                    # Persistence Subsystem
 │   │   __init__.py
@@ -60,28 +64,28 @@ netscope/
 │
 ├── routes/                     # REST API Service
 │   │   __init__.py
-│   │   api.py                  # Endpoints for stats, packets, alerts & CSV
+│   │   api.py                  # Endpoints for stats, packets, flows, alerts & CSV
 │
 ├── templates/                  # Frontend Presentation
 │   │   index.html              # Responsive dark navy dashboard layout
 │
 ├── static/                     # Assets & Scripts
 │   ├── css/
-│   │   └── style.css           # Custom dark theme styles
+│   │   └── style.css           # Custom dark theme styles & filter tags
 │   └── js/
 │       ├── charts.js           # Plotly chart renderers
-│       ├── dashboard.js        # Controller, safe DOM rendering & polling
+│       ├── dashboard.js        # Controller, safe DOM rendering, flows & alerts
 │       └── vendor/
 │           └── plotly.min.js   # Offline Plotly.js library
 │
 ├── tests/                      # Automated Quality Assurance Suite
 │   │   conftest.py             # Test client & deterministic fixtures
-│   │   test_parser.py          # Protocol parsing & decoders tests
+│   │   test_parser.py          # Protocol parsing, DNS & defensive decoding tests
 │   │   test_statistics.py      # Metric calculations & formula tests
 │   │   test_pcap_reader.py     # PCAP reading & error handling tests
-│   │   test_anomaly_detector.py# Security heuristics & alert tests
-│   │   test_filters.py         # Query, pagination & CSV export tests
-│   │   test_api.py             # REST API endpoint integration tests
+│   │   test_anomaly_detector.py# Heuristic alerts, false-positive & config tests
+│   │   test_filters.py         # Query, port, packet ID, flow ID & CSV export tests
+│   │   test_api.py             # REST API endpoint integration & config tests
 │   │   test_lifecycle.py       # Capture lifecycle & queue stress tests
 │
 ├── data/                       # Captures & Datasets
@@ -91,12 +95,12 @@ netscope/
 └── docs/                       # Academic Submission Documentation
     ├── problem_statement.md    # Problem statement & academic motivation
     ├── objectives_and_scope.md # Project scope, deliverables & constraints
-    ├── architecture.md         # Architecture design & Mermaid diagram
+    ├── architecture.md         # Architecture design & Mermaid topology
     ├── protocol_design.md      # Normalized schema & API contract
     ├── implementation.md       # Module-by-module technical breakdown
     ├── test_plan.md            # Verification strategy & test matrix
-    ├── test_report.md          # Complete test results (34/34 passing)
-    ├── performance_report.md   # Benchmarks (throughput, latency, memory)
+    ├── test_report.md          # Complete test results (41/41 passing)
+    ├── performance_report.md   # Empirical benchmarks (throughput, latency, memory)
     ├── limitations.md          # Technical constraints & driver notes
     ├── demo_script.md          # Five-minute presentation walkthrough
     ├── viva_questions.md       # 28 comprehensive viva questions & answers
@@ -174,12 +178,23 @@ http://127.0.0.1:5000
 3. **Explore and Filter Packets**:
    - Use the search bar for instant full-text filtering across IPs, ports, and protocols.
    - Filter by protocol (`TCP`, `UDP`, `ICMP`, `ARP`, `DNS`, `HTTP`, `TLS`, `IPv6`).
-   - Click any packet row to open the **Protocol Layer Inspector** modal displaying Ethernet, IP, TCP/UDP, and application fields.
+   - Filter by specific port (`Src Port`, `Dst Port`) or exact packet number (`Pkt #`).
+   - Click any packet row to open the **Protocol Layer Inspector** modal displaying Ethernet, IP, TCP/UDP, and application fields (including DNS transaction IDs and answer records).
 
-4. **Export Dataset**:
-   - Apply any desired filters and click **Export CSV** to download the active filtered dataset.
+4. **Conversation Flow Tracking**:
+   - Inspect the **Active Flows** card to review bidirectional conversations, data volumes, packet counts, and TCP states.
+   - Click the **Filter Flow** button on any flow to filter the packet explorer table to only packets belonging to that conversation.
+   - Click the active flow badge to clear the flow filter.
 
-5. **Live Packet Capture**:
+5. **Security Alerts & Threshold Tuning**:
+   - Inspect security alerts detailing affected hosts, observed values, thresholds, sliding time windows, and supporting packet references.
+   - Click any packet reference badge to inspect that specific packet immediately.
+   - Click **Configure Thresholds** in the Alerts header to adjust SYN flood or port scan thresholds in real-time.
+
+6. **Export Dataset**:
+   - Apply any desired filters and click **Export CSV** to download the active filtered dataset with Flow ID and Relative Time columns.
+
+7. **Live Packet Capture**:
    - Select an available network interface from the dropdown and click **Capture**.
    - If Npcap is not installed on Windows, NetScope displays clear diagnostic remediation.
 
@@ -188,14 +203,14 @@ http://127.0.0.1:5000
 ## 6. Running Tests & Benchmarks
 
 ### Execute Test Suite:
-```bash
-pytest -v
+```powershell
+.\.venv\Scripts\pytest.exe -v
 ```
-All **34 tests** pass with 100% success rate in ~0.40 seconds.
+All **41 tests** pass with 100% success rate in ~1.07 seconds.
 
 ### Run Performance & Correctness Benchmarks:
-```bash
-python benchmark_experiments.py
+```powershell
+.\.venv\Scripts\python.exe benchmark_experiments.py
 ```
 This runs Experiments A through E, testing offline processing rate, mathematical formula correctness, filter latency, API endpoint speed, and live driver capabilities.
 
@@ -205,13 +220,13 @@ This runs Experiments A through E, testing offline processing rate, mathematical
 
 | Metric | Measured Result |
 |---|---|
-| **Small Capture Processing (60 pkts)** | 1,102 PPS (0.054 s) |
-| **Medium Capture Processing (500 pkts)** | 996 PPS (0.501 s) |
-| **Large Capture Processing (2,500 pkts)** | 546 PPS (4.57 s) |
-| **Formula Accuracy vs Ground Truth** | 100% exact match across all 10 metrics |
-| **Filter Query Latency** | Under 1.8 milliseconds across all queries |
-| **Dashboard API Latency** | Under 1.6 milliseconds across all endpoints |
-| **Memory Footprint** | Bounded ~105 MB - 112 MB RSS |
+| **Small Capture Processing (60 pkts)** | **2,750.25 PPS** (0.0218 s) |
+| **Medium Capture Processing (500 pkts)** | **1,588.92 PPS** (0.3147 s) |
+| **Large Capture Processing (2,500 pkts)** | **1,425.06 PPS** (1.7543 s) |
+| **Formula Accuracy vs Ground Truth** | **100% exact match** across all 10 metrics |
+| **Filter Query Latency** | Under **0.81 milliseconds** across all queries |
+| **Dashboard API Latency** | Under **0.89 milliseconds** across all endpoints |
+| **Memory Footprint** | Bounded **104.7 MB - 112.7 MB RSS** |
 
 ---
 

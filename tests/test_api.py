@@ -101,3 +101,38 @@ def test_load_sample_and_inspect_metrics(client):
     alert_types = [a["alert_type"] for a in alerts]
     assert any("SYN Flood" in t for t in alert_types)
     assert any("Port Scan" in t for t in alert_types)
+
+    # 9. Check active capture metadata
+    res_curr = client.get("/api/captures/status")
+    assert res_curr.status_code == 200
+    assert res_curr.json["filename"] == "sample_traffic.pcap"
+    assert res_curr.json["packets_in_memory"] == 60
+
+
+def test_alerts_config_api(client):
+    # GET config
+    res_get = client.get("/api/alerts/config")
+    assert res_get.status_code == 200
+    cfg = res_get.json["thresholds"]
+    assert "syn_flood_threshold" in cfg
+    assert "port_scan_threshold" in cfg
+    assert "packet_rate_threshold" in cfg
+
+    # POST config update
+    res_post = client.post("/api/alerts/config", json={
+        "syn_flood_threshold": 35,
+        "port_scan_threshold": 12,
+        "packet_rate_threshold": 300
+    })
+    assert res_post.status_code == 200
+    assert res_post.json["success"] is True
+    updated = res_post.json["thresholds"]
+    assert updated["syn_flood_threshold"] == 35
+    assert updated["port_scan_threshold"] == 12
+    assert updated["packet_rate_threshold"] == 300
+
+    # Invalid JSON or non-dict
+    res_inv = client.post("/api/alerts/config", data="invalid string", content_type="application/json")
+    assert res_inv.status_code == 400
+
+

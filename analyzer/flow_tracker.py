@@ -2,6 +2,7 @@
 NetScope Flow Tracker
 Aggregates bidirectional network flows based on canonical 5-tuples.
 Maintains stateful statistics: flow duration, packet counts, byte volumes, and TCP lifecycle.
+Associates individual packet records with their parent flow identifiers for cross-drilldown.
 """
 
 from collections import defaultdict
@@ -11,6 +12,8 @@ class FlowTracker:
     def __init__(self):
         # Maps canonical flow key -> flow metadata dict
         self.flows = {}
+        # Maps flow_id -> flow metadata dict for O(1) direct lookup
+        self.flows_by_id = {}
 
     def _canonical_key(self, src_ip: str, dst_ip: str, proto: str, sport: int, dport: int):
         """Builds a symmetric canonical key so packets in both directions map to the same flow."""
@@ -31,6 +34,7 @@ class FlowTracker:
         pkt_len = record.get("packet_length", 0)
         ts = record.get("timestamp", 0.0)
         app_proto = record.get("application_protocol")
+        pkt_id = record.get("packet_id")
 
         if not src_ip or not dst_ip:
             return
@@ -39,8 +43,9 @@ class FlowTracker:
         is_forward = (src_ip == key[0] and (sport or 0) == key[3])
 
         if key not in self.flows:
-            self.flows[key] = {
-                "flow_id": f"flow-{len(self.flows) + 1}",
+            flow_num = len(self.flows) + 1
+            flow_obj = {
+                "flow_id": f"flow-{flow_num}",
                 "endpoint_a": f"{key[0]}:{key[3]}",
                 "endpoint_b": f"{key[1]}:{key[4]}",
                 "transport_protocol": proto,
@@ -55,9 +60,16 @@ class FlowTracker:
                 "total_packets": 0,
                 "total_bytes": 0,
                 "tcp_state": "INIT" if proto == "TCP" else "STATELESS",
+                "packet_ids": [],
             }
+            self.flows[key] = flow_obj
+            self.flows_by_id[flow_obj["flow_id"]] = flow_obj
 
         flow = self.flows[key]
+        record["flow_id"] = flow["flow_id"]
+        if pkt_id is not None:
+            flow["packet_ids"].append(pkt_id)
+
         flow["end_time"] = max(flow["end_time"], ts)
         flow["duration"] = round(flow["end_time"] - flow["start_time"], 3)
         flow["total_packets"] += 1
@@ -90,11 +102,35 @@ class FlowTracker:
     def get_flow_count(self) -> int:
         return len(self.flows)
 
+    def get_flow_by_id(self, flow_id: str) -> dict | None:
+        return self.flows_by_id.get(flow_id)
+
     def get_top_flows(self, limit: int = 10, sort_by: str = "bytes") -> list[dict]:
-        """Returns sorted flow summaries."""
+        """Returns sorted flow summaries without exposing unbounded packet ID arrays."""
         sort_key = "total_bytes" if sort_by == "bytes" else "total_packets"
         sorted_flows = sorted(self.flows.values(), key=lambda f: f[sort_key], reverse=True)
-        return sorted_flows[:limit]
+        results = []
+        for f in sorted_flows[:limit]:
+            results.append({
+                "flow_id": f["flow_id"],
+                "endpoint_a": f["endpoint_a"],
+                "endpoint_b": f["endpoint_b"],
+                "transport_protocol": f["transport_protocol"],
+                "application_protocol": f["application_protocol"],
+                "start_time": f["start_time"],
+                "end_time": f["end_time"],
+                "duration": f["duration"],
+                "forward_packets": f["forward_packets"],
+                "forward_bytes": f["forward_bytes"],
+                "reverse_packets": f["reverse_packets"],
+                "reverse_bytes": f["reverse_bytes"],
+                "total_packets": f["total_packets"],
+                "total_bytes": f["total_bytes"],
+                "tcp_state": f["tcp_state"],
+                "packet_count": len(f["packet_ids"]),
+            })
+        return results
 
     def reset(self):
         self.flows.clear()
+        self.flows_by_id.clear()

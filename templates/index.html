@@ -50,6 +50,15 @@
                 <span>Load Sample PCAP</span>
             </button>
 
+            <!-- Anomaly Threshold Configuration Button -->
+            <button class="btn btn-outline" id="btn-open-config" title="Configure Anomaly Detection Heuristic Thresholds">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"/>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                </svg>
+                <span>Thresholds</span>
+            </button>
+
             <!-- Live Capture Controls -->
             <div class="live-capture-controls">
                 <select id="interface-select" class="form-select" title="Network Interface">
@@ -189,23 +198,25 @@
             <!-- Network Flows -->
             <div class="card">
                 <div class="card-header">
-                    <h2>Canonical Network Flows (5-Tuples)</h2>
+                    <h2>Canonical Network Flows (Conversations)</h2>
                     <span class="badge" id="flow-count-badge">0 Flows</span>
                 </div>
                 <div class="card-body scrollable-table">
                     <table class="data-table" id="table-flows">
                         <thead>
                             <tr>
-                                <th>Flow Endpoints</th>
-                                <th>Protocol</th>
+                                <th>Flow ID</th>
+                                <th>Endpoints (A &harr; B)</th>
+                                <th>Proto</th>
                                 <th>Duration</th>
                                 <th>Packets</th>
                                 <th>Volume</th>
                                 <th>State</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
                         <tbody id="flows-tbody">
-                            <tr><td colspan="6" class="text-center text-muted">No flows recorded.</td></tr>
+                            <tr><td colspan="8" class="text-center text-muted">No flows recorded.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -216,7 +227,9 @@
         <section class="card alert-card-section">
             <div class="card-header">
                 <h2>Traffic Anomaly & Security Intelligence</h2>
-                <span class="badge badge-warning" id="alert-count-badge">0 Alerts</span>
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span class="badge badge-warning" id="alert-count-badge">0 Alerts</span>
+                </div>
             </div>
             <div class="card-body">
                 <div id="alerts-container" class="alerts-list">
@@ -231,11 +244,14 @@
                 <div class="explorer-title-group">
                     <h2>Packet Explorer</h2>
                     <span class="badge" id="packet-filter-count">Showing 0 packets</span>
+                    <span id="active-flow-badge" class="badge badge-academic" style="display:none; cursor:pointer;" title="Click to clear conversation filter">
+                        Conversation: <strong id="active-flow-id"></strong> &times;
+                    </span>
                 </div>
 
                 <!-- Filter Controls Bar -->
                 <div class="filter-toolbar">
-                    <input type="text" id="filter-search" class="form-input" placeholder="Search IP, port, summary...">
+                    <input type="text" id="filter-search" class="form-input" placeholder="Search IP, summary, info...">
                     
                     <select id="filter-protocol" class="form-select">
                         <option value="">All Protocols</option>
@@ -249,9 +265,11 @@
                         <option value="IPv6">IPv6</option>
                     </select>
 
+                    <input type="number" id="filter-pkt-id" class="form-input form-input-xs" placeholder="Pkt #" title="Exact Packet Number">
                     <input type="text" id="filter-src-ip" class="form-input form-input-sm" placeholder="Src IP">
                     <input type="text" id="filter-dst-ip" class="form-input form-input-sm" placeholder="Dst IP">
-                    <input type="number" id="filter-port" class="form-input form-input-xs" placeholder="Port">
+                    <input type="number" id="filter-src-port" class="form-input form-input-xs" placeholder="Src Port" title="Source Port">
+                    <input type="number" id="filter-dst-port" class="form-input form-input-xs" placeholder="Dst Port" title="Destination Port">
 
                     <button class="btn btn-outline btn-sm" id="btn-reset-filters" title="Reset all filters">Reset</button>
                     <button class="btn btn-secondary btn-sm" id="btn-export-csv" title="Export filtered packets to CSV">
@@ -269,7 +287,9 @@
                         <thead>
                             <tr>
                                 <th data-sort="packet_id">#</th>
+                                <th>Flow</th>
                                 <th data-sort="timestamp">Time (UTC)</th>
+                                <th>Rel (s)</th>
                                 <th data-sort="source_ip">Source</th>
                                 <th data-sort="destination_ip">Destination</th>
                                 <th>Net</th>
@@ -277,11 +297,11 @@
                                 <th>App</th>
                                 <th data-sort="packet_length">Length</th>
                                 <th>Flags</th>
-                                <th>Info</th>
+                                <th>Protocol Summary</th>
                             </tr>
                         </thead>
                         <tbody id="packet-table-body">
-                            <tr><td colspan="10" class="text-center text-muted">No packets loaded. Upload a PCAP or load sample data.</td></tr>
+                            <tr><td colspan="12" class="text-center text-muted">No packets loaded. Upload a PCAP or load sample data.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -314,6 +334,60 @@
             <div class="modal-body" id="modal-packet-body">
                 <!-- Dynamically populated layers -->
             </div>
+        </div>
+    </div>
+
+    <!-- Threshold Configuration Modal -->
+    <div id="config-modal" class="modal-overlay" style="display:none;">
+        <div class="modal-content" style="max-width: 600px;">
+            <div class="modal-header">
+                <h3>Anomaly Detection Heuristic Thresholds</h3>
+                <button class="modal-close" id="btn-close-config">&times;</button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size:12px; color:var(--text-secondary); margin-bottom:12px;">
+                    Adjust deterministic detection parameters below. Rules flag suspicious traffic patterns and volumetric surges without altering underlying packet records.
+                </p>
+                <div style="display:flex; flex-direction:column; gap:12px;">
+                    <div class="field-row">
+                        <span class="field-key">SYN Burst Threshold (SYNs in 5s):</span>
+                        <input type="number" id="cfg-syn-flood" class="form-input form-input-sm" min="3" max="500">
+                    </div>
+                    <div class="field-row">
+                        <span class="field-key">Port Scan Threshold (Ports in 5s):</span>
+                        <input type="number" id="cfg-port-scan" class="form-input form-input-sm" min="3" max="500">
+                    </div>
+                    <div class="field-row">
+                        <span class="field-key">Packet Rate Spike Threshold (PPS):</span>
+                        <input type="number" id="cfg-packet-rate" class="form-input form-input-sm" min="10" max="50000">
+                    </div>
+                    <div class="field-row">
+                        <span class="field-key">Bandwidth Threshold (Bytes/sec):</span>
+                        <input type="number" id="cfg-byte-rate" class="form-input form-input-sm" min="1000" max="100000000">
+                    </div>
+                    <div class="field-row">
+                        <span class="field-key">Dominant Host Volume Ratio (0.1 - 1.0):</span>
+                        <input type="number" id="cfg-host-ratio" class="form-input form-input-sm" min="0.1" max="1.0" step="0.05">
+                    </div>
+                    <div class="field-row">
+                        <span class="field-key">Alert Cooldown Window (Seconds):</span>
+                        <input type="number" id="cfg-cooldown" class="form-input form-input-sm" min="1" max="120">
+                    </div>
+                </div>
+                <div style="margin-top:16px; display:flex; justify-content:flex-end; gap:8px;">
+                    <button class="btn btn-outline btn-sm" id="btn-cancel-config">Cancel</button>
+                    <button class="btn btn-primary btn-sm" id="btn-save-config">Save Thresholds</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Processing / Loading Overlay -->
+    <div id="loading-overlay" class="modal-overlay" style="display:none; z-index:2000;">
+        <div style="background:var(--bg-card); border:1px solid var(--border-color); border-radius:10px; padding:24px 32px; text-align:center; display:flex; flex-direction:column; align-items:center; gap:12px;">
+            <div class="status-dot status-running" style="width:16px; height:16px;"></div>
+            <div id="loading-overlay-text" style="font-weight:600; font-size:14px;">Ingesting and parsing capture...</div>
+            <div style="font-size:11px; color:var(--text-secondary);">Calculating multi-layer headers and traffic flows</div>
         </div>
     </div>
 

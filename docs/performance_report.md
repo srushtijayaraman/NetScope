@@ -15,13 +15,13 @@ Evaluates offline ingestion rate, CPU elapsed time, and resident memory growth a
 
 | Workload Tier | Packet Count | Capture Size | Elapsed Time (s) | Ingestion Rate (PPS) | Memory (RSS MB) | Skipped/Errors |
 |---|---|---|---|---|---|---|
-| **Small (Sample Traffic)** | 60 | 4.46 KB | 0.0544 s | **1,102.22 PPS** | 105.02 MB | 0 |
-| **Medium (Synthetic Flow)** | 500 | 126.28 KB | 0.5017 s | **996.59 PPS** | 105.98 MB | 0 |
-| **Large (Multi-Protocol)** | 2,500 | 288.02 KB | 4.5746 s | **546.49 PPS** | 112.31 MB | 0 |
+| **Small (Sample Traffic)** | 60 | 4.46 KB | 0.0218 s | **2,750.25 PPS** | 104.70 MB | 0 |
+| **Medium (Synthetic Flow)** | 500 | 126.28 KB | 0.3147 s | **1,588.92 PPS** | 106.26 MB | 0 |
+| **Large (Multi-Protocol)** | 2,500 | 288.02 KB | 1.7543 s | **1,425.06 PPS** | 112.73 MB | 0 |
 
 ### Analysis:
-- Ingestion rate scales gracefully from ~1,100 PPS on small captures to ~550 PPS on multi-thousand packet datasets.
-- Memory consumption remains exceptionally flat, rising by only ~7 MB (from 105 MB to 112 MB) when processing 2,500 full multi-layer packets, demonstrating the efficacy of bounded ring buffering.
+- Ingestion rate scales gracefully from **2,750 PPS** on small captures to over **1,425 PPS** on multi-thousand packet datasets.
+- Memory consumption remains exceptionally flat, rising by only ~8 MB (from 104.7 MB to 112.7 MB) when processing 2,500 full multi-layer packets, demonstrating the efficacy of bounded ring buffering and zero duplicate in-memory data copies.
 
 ---
 
@@ -52,15 +52,15 @@ Measures the server-side query response latency across 25 iterations on the samp
 
 | Filter Type | Query Expression | Avg Latency (ms) | Min Latency (ms) | Max Latency (ms) |
 |---|---|---|---|---|
-| **Unfiltered (All Records)** | `/api/packets?limit=50` | 1.609 ms | 1.401 ms | 2.960 ms |
-| **Protocol Filter (TCP)** | `/api/packets?protocol=TCP` | 1.773 ms | 1.479 ms | 2.083 ms |
-| **Protocol Filter (ARP)** | `/api/packets?protocol=ARP` | 0.964 ms | 0.856 ms | 1.211 ms |
-| **Source IP Filter** | `/api/packets?src_ip=10.0.0.99` | 1.413 ms | 1.241 ms | 1.919 ms |
-| **Text Search Filter** | `/api/packets?search=who-has` | 1.037 ms | 0.383 ms | 3.626 ms |
-| **Combined Filters** | `/api/packets?protocol=TCP&src_ip=10.0.0.88` | 1.228 ms | 1.009 ms | 1.802 ms |
+| **Unfiltered (All Records)** | `/api/packets?limit=50` | **0.809 ms** | 0.574 ms | 1.604 ms |
+| **Protocol Filter (TCP)** | `/api/packets?protocol=TCP&limit=50` | **0.744 ms** | 0.574 ms | 1.196 ms |
+| **Protocol Filter (ARP)** | `/api/packets?protocol=ARP&limit=50` | **0.399 ms** | 0.284 ms | 0.713 ms |
+| **Source IP Filter** | `/api/packets?src_ip=10.0.0.99&limit=50` | **0.579 ms** | 0.423 ms | 1.323 ms |
+| **Text Search Filter** | `/api/packets?search=who-has&limit=50` | **0.348 ms** | 0.283 ms | 0.488 ms |
+| **Combined Filters** | `/api/packets?protocol=TCP&src_ip=10.0.0.88&limit=50` | **0.580 ms** | 0.402 ms | 0.872 ms |
 
 ### Analysis:
-All filter queries return in under **2 milliseconds**, providing instantaneous UI responsiveness during table searches.
+All filter queries return in **under 1 millisecond**, providing instantaneous UI responsiveness during table searches.
 
 ---
 
@@ -69,13 +69,15 @@ Measures HTTP request-response round-trip latency across all core JSON endpoints
 
 | API Endpoint | Responsibility | Average Latency | Min Latency | Max Latency |
 |---|---|---|---|---|
-| `GET /api/health` | Service & driver diagnostics | **0.711 ms** | 0.582 ms | 1.104 ms |
-| `GET /api/stats` | High-level summary metrics | **0.775 ms** | 0.612 ms | 1.250 ms |
-| `GET /api/protocols` | Protocol breakdown percentages | **0.727 ms** | 0.590 ms | 1.189 ms |
-| `GET /api/traffic-timeline`| Chronological time buckets | **0.795 ms** | 0.640 ms | 1.312 ms |
-| `GET /api/top-talkers` | Host rankings and flows | **1.449 ms** | 1.180 ms | 2.100 ms |
-| `GET /api/alerts` | Anomaly heuristic alerts | **1.090 ms** | 0.890 ms | 1.840 ms |
-| `GET /api/export/csv` | RFC 4180 CSV export stream | **1.540 ms** | 1.220 ms | 2.450 ms |
+| `GET /api/health` | Service & driver diagnostics | **0.294 ms** | 0.256 ms | 0.436 ms |
+| `GET /api/stats` | High-level summary metrics | **0.345 ms** | 0.291 ms | 0.456 ms |
+| `GET /api/protocols` | Protocol breakdown percentages | **0.265 ms** | 0.237 ms | 0.355 ms |
+| `GET /api/traffic-timeline`| Chronological time buckets | **0.331 ms** | 0.228 ms | 0.531 ms |
+| `GET /api/top-talkers` | Host rankings and flows | **0.675 ms** | 0.562 ms | 1.296 ms |
+| `GET /api/flows` | Flow tracking and state | **0.681 ms** | 0.513 ms | 0.888 ms |
+| `GET /api/alerts` | Anomaly heuristic alerts | **0.436 ms** | 0.333 ms | 0.534 ms |
+| `GET /api/alerts/config` | Configurable detection thresholds | **0.335 ms** | 0.289 ms | 0.429 ms |
+| `GET /api/export/csv` | RFC 4180 CSV export stream | **0.889 ms** | 0.624 ms | 1.754 ms |
 
 ---
 

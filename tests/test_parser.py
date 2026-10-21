@@ -118,3 +118,42 @@ def test_defensive_missing_fields():
     assert rec["network_protocol"] == "Unknown"
     assert rec["transport_protocol"] == "None"
     assert rec["parsing_status"] == "Parsed"
+
+
+def test_parse_dns_query_and_response_details():
+    """Verify deep DNS decoding: transaction ID, query types, and answer extraction."""
+    from scapy.layers.dns import DNS, DNSQR, DNSRR
+
+    # DNS query
+    dns_query_pkt = eth() / IP(src="192.168.1.10", dst="8.8.8.8") / UDP(sport=53530, dport=53) / DNS(
+        id=0x1A2B, qr=0, qd=DNSQR(qname="antigravity.dev", qtype="A")
+    )
+    rec_q = parse_packet(dns_query_pkt, packet_id=10, base_timestamp=100.0)
+    assert rec_q["application_protocol"] == "DNS"
+    assert rec_q["details"]["application_layer"]["protocol"] == "DNS"
+    assert rec_q["details"]["application_layer"]["transaction_id"] == "0x1a2b"
+    assert rec_q["details"]["application_layer"]["query_name"] == "antigravity.dev."
+    assert rec_q["details"]["application_layer"]["query_type"].startswith("A")
+    assert rec_q["relative_time_sec"] >= 0.0
+
+    # DNS response with answer
+    dns_resp_pkt = eth() / IP(src="8.8.8.8", dst="192.168.1.10") / UDP(sport=53, dport=53530) / DNS(
+        id=0x1A2B, qr=1, rcode=0,
+        qd=DNSQR(qname="antigravity.dev", qtype="A"),
+        an=DNSRR(rrname="antigravity.dev", type="A", rdata="142.250.190.46", ttl=300)
+    )
+    rec_r = parse_packet(dns_resp_pkt, packet_id=11)
+    assert rec_r["details"]["application_layer"]["rcode"] == 0
+    assert "NOERROR" in rec_r["details"]["application_layer"]["rcode_description"]
+    assert len(rec_r["details"]["application_layer"]["answers"]) >= 1
+    assert "142.250.190.46" in rec_r["details"]["application_layer"]["answers"][0]
+
+
+def test_parse_corrupt_packet_safe():
+    """Ensure non-packet or severely corrupted objects return Error safely without raising."""
+    rec = parse_packet("not_a_scapy_packet", packet_id=99)
+    assert rec["packet_id"] == 99
+    assert rec["parsing_status"] == "Malformed"
+    assert "error" in rec["details"]
+
+

@@ -1,12 +1,17 @@
 """
 NetScope Packet Parser
-Extracts network and transport layer metadata into a normalized, structured representation.
+Extracts network, transport, and application layer metadata into a normalized, structured representation.
 Handles Ethernet, ARP, IPv4, IPv6, TCP, UDP, ICMP, ICMPv6, DNS, HTTP, TLS, fragments, and malformed packets.
+Guarantees robust exception safety and zero uncaught crashes on corrupt frames.
 """
 
+import warnings
 from datetime import datetime, timezone
 from scapy.packet import Packet
 from analyzer.protocol_classifier import classify_application_protocol
+
+# Silence upstream Scapy 2.8 PacketListField deprecation warnings on DNS fields
+warnings.filterwarnings("ignore", category=DeprecationWarning, module=r"scapy\..*")
 
 TCP_FLAG_NAMES = {
     0x01: "FIN",
@@ -42,6 +47,28 @@ ICMPV6_TYPES = {
     136: "Neighbor Advertisement",
 }
 
+DNS_QTYPES = {
+    1: "A (IPv4 Host)",
+    2: "NS (Authoritative Name Server)",
+    5: "CNAME (Canonical Name)",
+    6: "SOA (Start of Authority)",
+    12: "PTR (Pointer / Reverse DNS)",
+    15: "MX (Mail Exchange)",
+    16: "TXT (Text Record)",
+    28: "AAAA (IPv6 Host)",
+    33: "SRV (Service Locator)",
+    255: "ANY (All Records)",
+}
+
+DNS_RCODES = {
+    0: "NOERROR (Success)",
+    1: "FORMERR (Format Error)",
+    2: "SERVFAIL (Server Failure)",
+    3: "NXDOMAIN (Non-Existent Domain)",
+    4: "NOTIMP (Not Implemented)",
+    5: "REFUSED (Query Refused)",
+}
+
 
 def parse_tcp_flags(flags_val) -> list[str]:
     """Decodes integer or Scapy FlagValue into list of flag strings."""
@@ -51,13 +78,12 @@ def parse_tcp_flags(flags_val) -> list[str]:
         int_val = int(flags_val)
         return [name for bit, name in TCP_FLAG_NAMES.items() if (int_val & bit)]
     except (ValueError, TypeError):
-        # Fallback if Scapy provides string like 'SA'
         str_val = str(flags_val).upper()
         mapping = {"F": "FIN", "S": "SYN", "R": "RST", "P": "PSH", "A": "ACK", "U": "URG", "E": "ECE", "C": "CWR"}
         return [mapping[c] for c in str_val if c in mapping]
 
 
-def parse_packet(packet: Packet, packet_id: int, capture_id: str = "default") -> dict:
+def parse_packet(packet: Packet, packet_id: int, capture_id: str = "default", base_timestamp: float | None = None) -> dict:
     """
     Parses a single Scapy packet into a normalized, safe dictionary.
     Guarantees no unhandled exceptions and complete defensive attribute checking.
@@ -80,11 +106,15 @@ def parse_packet(packet: Packet, packet_id: int, capture_id: str = "default") ->
         ts_float = datetime.now(timezone.utc).timestamp()
         ts_iso = datetime.fromtimestamp(ts_float, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:-3]
 
+    relative_sec = round(ts_float - base_timestamp, 4) if (base_timestamp is not None and ts_float >= base_timestamp) else 0.0
+
     record = {
         "packet_id": packet_id,
         "capture_id": capture_id,
+        "flow_id": None,
         "timestamp": ts_float,
         "timestamp_iso": ts_iso,
+        "relative_time_sec": relative_sec,
         "packet_length": raw_wire_len,
         "captured_length": raw_wire_len,
         "source_mac": None,
@@ -161,6 +191,7 @@ def parse_packet(packet: Packet, packet_id: int, capture_id: str = "default") ->
                 "header_length": getattr(ip, "ihl", None),
                 "fragment_offset": frag_offset,
                 "flags": str(flags),
+                "checksum": hex(getattr(ip, "chksum", 0)) if getattr(ip, "chksum", None) is not None else None,
             }
 
         elif packet.haslayer("IPv6"):
@@ -175,6 +206,7 @@ def parse_packet(packet: Packet, packet_id: int, capture_id: str = "default") ->
                 "hop_limit": getattr(ipv6, "hlim", None),
                 "traffic_class": getattr(ipv6, "tc", None),
                 "next_header": getattr(ipv6, "nh", None),
+                "flow_label": getattr(ipv6, "fl", None),
             }
 
         # 3. Transport Layer
@@ -203,6 +235,7 @@ def parse_packet(packet: Packet, packet_id: int, capture_id: str = "default") ->
                 "flags_hex": record["tcp_flags_hex"],
                 "window_size": getattr(tcp, "window", None),
                 "checksum": hex(getattr(tcp, "chksum", 0)) if getattr(tcp, "chksum", None) is not None else None,
+                "urgent_pointer": getattr(tcp, "urgptr", None),
             }
             record["summary"] = f"{record['source_ip']}:{record['source_port']} -> {record['destination_ip']}:{record['destination_port']} [{flags_str}] Seq={record['tcp_seq']} Ack={record['tcp_ack']}"
 
@@ -226,15 +259,19 @@ def parse_packet(packet: Packet, packet_id: int, capture_id: str = "default") ->
             type_num = getattr(icmp, "type", 0)
             code_num = getattr(icmp, "code", 0)
             type_desc = ICMP_TYPES.get(type_num, f"Type {type_num}")
+            icmp_id = getattr(icmp, "id", None)
+            icmp_seq = getattr(icmp, "seq", None)
             record["details"]["transport_layer"] = {
                 "protocol": "ICMP",
                 "type": type_num,
                 "type_name": type_desc,
                 "code": code_num,
-                "id": getattr(icmp, "id", None),
-                "seq": getattr(icmp, "seq", None),
+                "id": icmp_id,
+                "sequence": icmp_seq,
+                "checksum": hex(getattr(icmp, "chksum", 0)) if getattr(icmp, "chksum", None) is not None else None,
             }
-            record["summary"] = f"ICMP {type_desc} (code {code_num}) {record['source_ip']} -> {record['destination_ip']}"
+            id_seq_info = f" id={icmp_id} seq={icmp_seq}" if icmp_id is not None else ""
+            record["summary"] = f"ICMP {type_desc} (code {code_num}){id_seq_info} {record['source_ip']} -> {record['destination_ip']}"
 
         elif packet.haslayer("ICMPv6EchoRequest") or packet.haslayer("ICMPv6EchoReply") or "ICMPv6" in packet.summary():
             record["transport_protocol"] = "ICMPv6"
@@ -251,38 +288,69 @@ def parse_packet(packet: Packet, packet_id: int, capture_id: str = "default") ->
             dns = packet["DNS"]
             qr = getattr(dns, "qr", 0)
             is_response = (qr == 1)
+            tx_id = getattr(dns, "id", 0)
+            rcode_val = getattr(dns, "rcode", 0)
+            rcode_desc = DNS_RCODES.get(rcode_val, f"RCODE {rcode_val}")
+
+            # Safely handle Scapy PacketListField without triggering deprecation warnings
             qname = ""
-            qtype = ""
-            if getattr(dns, "qd", None) is not None:
-                try:
-                    qname = getattr(dns.qd, "qname", b"").decode(errors="replace") if hasattr(dns.qd, "qname") else ""
-                    qtype = str(getattr(dns.qd, "qtype", ""))
-                except Exception:
-                    qname = ""
-            
+            qtype_desc = "Unknown"
+            try:
+                qd_list = getattr(dns, "qd", None)
+                if qd_list:
+                    # Index first element cleanly
+                    first_qd = qd_list[0] if hasattr(qd_list, "__getitem__") else qd_list
+                    qn = getattr(first_qd, "qname", b"")
+                    qname = qn.decode(errors="replace") if isinstance(qn, bytes) else str(qn)
+                    qt = getattr(first_qd, "qtype", 1)
+                    qtype_desc = DNS_QTYPES.get(qt, f"Type {qt}")
+            except Exception:
+                qname = ""
+
             answers = []
-            if is_response and getattr(dns, "an", None) is not None:
+            if is_response:
                 try:
-                    an_count = getattr(dns, "ancount", 0)
-                    for i in range(min(an_count, 5)):
-                        rr = dns.an[i]
+                    an_layer = getattr(dns, "an", None)
+                    curr = an_layer
+                    while curr and len(answers) < 8:
+                        rr = curr[0] if hasattr(curr, "__getitem__") and not hasattr(curr, "rdata") else curr
                         rdata = getattr(rr, "rdata", "")
                         if isinstance(rdata, bytes):
                             rdata = rdata.decode(errors="replace")
-                        answers.append(str(rdata))
+                        rr_type = getattr(rr, "type", 1)
+                        rr_type_name = DNS_QTYPES.get(rr_type, f"Type {rr_type}").split(" ")[0]
+                        answers.append(f"{rr_type_name}: {rdata}")
+
+                        if hasattr(curr, "payload") and getattr(curr.payload, "name", "") == "DNS Resource Record":
+                            curr = curr.payload
+                        elif hasattr(curr, "__getitem__") and len(answers) < len(curr):
+                            curr = curr[len(answers)]
+                        else:
+                            break
                 except Exception:
                     pass
 
+            flags_info = []
+            if getattr(dns, "aa", 0): flags_info.append("Authoritative")
+            if getattr(dns, "tc", 0): flags_info.append("Truncated")
+            if getattr(dns, "rd", 0): flags_info.append("Recursion Desired")
+            if getattr(dns, "ra", 0): flags_info.append("Recursion Available")
+
             record["details"]["application_layer"] = {
                 "protocol": "DNS",
+                "transaction_id": hex(tx_id),
                 "is_response": is_response,
+                "message_type": "Response" if is_response else "Query",
                 "query_name": qname,
-                "query_type": qtype,
-                "rcode": getattr(dns, "rcode", None),
+                "query_type": qtype_desc,
+                "rcode": rcode_val,
+                "rcode_description": rcode_desc,
+                "dns_flags": flags_info,
                 "answers": answers,
             }
             direction = "Resp" if is_response else "Query"
-            record["summary"] = f"DNS {direction} {qname}" + (f" -> {answers[0]}" if answers else "")
+            first_ans = f" -> {answers[0]}" if answers else ""
+            record["summary"] = f"DNS {direction} (ID {hex(tx_id)}) {qname} [{qtype_desc.split(' ')[0]}]{first_ans}"
 
         elif app_proto == "HTTP" and packet.haslayer("Raw"):
             try:
@@ -291,6 +359,7 @@ def parse_packet(packet: Packet, packet_id: int, capture_id: str = "default") ->
                 record["details"]["application_layer"] = {
                     "protocol": "HTTP",
                     "request_line": first_line,
+                    "payload_length_bytes": len(raw_data),
                 }
                 record["summary"] = f"HTTP {first_line}"
             except Exception:
@@ -299,7 +368,7 @@ def parse_packet(packet: Packet, packet_id: int, capture_id: str = "default") ->
         elif "TLS" in app_proto:
             record["details"]["application_layer"] = {
                 "protocol": "TLS",
-                "note": "Encrypted TLS record (metadata only, no payload decryption)",
+                "note": "Encrypted Transport Layer Security (TLS) record. Payload is encrypted; metadata only.",
             }
             if not record["summary"]:
                 record["summary"] = f"TLS {record['source_ip']}:{record['source_port']} -> {record['destination_ip']}:{record['destination_port']}"
@@ -309,10 +378,11 @@ def parse_packet(packet: Packet, packet_id: int, capture_id: str = "default") ->
             if record["source_ip"] and record["destination_ip"]:
                 record["summary"] = f"{record['network_protocol']} {record['source_ip']} -> {record['destination_ip']} [{record['transport_protocol']}]"
             else:
-                record["summary"] = f"{record['network_protocol']} Packet (Len={record['packet_length']})"
+                record["summary"] = f"{record['network_protocol']} Frame (Len={record['packet_length']})"
 
     except Exception as exc:
         record["parsing_status"] = "Malformed"
-        record["summary"] = f"Malformed Packet: {str(exc)}"
+        record["summary"] = f"Malformed Frame: {str(exc)}"
+        record["details"]["error"] = str(exc)
 
     return record

@@ -54,12 +54,14 @@ class DatabaseManager:
                     alert_id TEXT,
                     capture_id TEXT,
                     alert_type TEXT,
+                    classification_nature TEXT,
                     severity TEXT,
                     timestamp REAL,
                     host TEXT,
                     observed_metric TEXT,
                     configured_threshold TEXT,
                     explanation TEXT,
+                    packet_references TEXT,
                     created_at TEXT
                 )
             """)
@@ -91,21 +93,24 @@ class DatabaseManager:
     def save_alert(self, capture_id: str, alert: dict):
         """Appends an alert to historical records."""
         now = datetime.now(timezone.utc).isoformat()
+        refs_json = json.dumps(alert.get("packet_references", []))
         with self._get_connection() as conn:
             cursor = conn.cursor()
             cursor.execute("""
-                INSERT INTO alerts (alert_id, capture_id, alert_type, severity, timestamp, host, observed_metric, configured_threshold, explanation, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO alerts (alert_id, capture_id, alert_type, classification_nature, severity, timestamp, host, observed_metric, configured_threshold, explanation, packet_references, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 alert.get("alert_id"),
                 capture_id,
                 alert.get("alert_type"),
+                alert.get("classification_nature", "Heuristic"),
                 alert.get("severity"),
                 alert.get("timestamp", 0.0),
                 alert.get("host"),
-                alert.get("observed_metric"),
-                alert.get("configured_threshold"),
+                alert.get("observed_value") or alert.get("observed_metric"),
+                alert.get("threshold") or alert.get("configured_threshold"),
                 alert.get("explanation"),
+                refs_json,
                 now,
             ))
             conn.commit()

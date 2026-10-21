@@ -194,7 +194,9 @@ def run_benchmarks():
         ("Protocol Breakdown", "/api/protocols"),
         ("Traffic Timeline", "/api/traffic-timeline"),
         ("Top Talkers & Flows", "/api/top-talkers"),
+        ("Active Flows", "/api/flows"),
         ("Security Alerts", "/api/alerts"),
+        ("Alert Config", "/api/alerts/config"),
         ("CSV Export", "/api/export/csv"),
     ]
 
