@@ -3,15 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>NetScope | Real-Time Network Packet Analyzer & Traffic Intelligence</title>
+    <title>NetScope | Network Packet Analyzer & Traffic Intelligence</title>
     <!-- Prevent Theme Flash -->
     <script>
         (function() {
             try {
                 var urlParams = new URLSearchParams(window.location.search);
                 var urlTheme = urlParams.get("theme");
+                var viewParam = urlParams.get("view") || "";
+                if (viewParam.indexOf("dark") !== -1) urlTheme = "dark";
+                if (viewParam.indexOf("light") !== -1) urlTheme = "light";
                 var savedTheme = urlTheme || localStorage.getItem("netscope_theme");
-                var prefTheme = savedTheme || (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+                var prefTheme = savedTheme || "dark";
                 if (urlTheme) {
                     localStorage.setItem("netscope_theme", urlTheme);
                 }
@@ -19,603 +22,720 @@
             } catch (e) {}
         })();
     </script>
-    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="stylesheet" href="/static/css/style.css?v=3.1">
     <!-- Local offline Plotly.js -->
     <script src="/static/js/vendor/plotly.min.js"></script>
 </head>
 <body>
-    <!-- Top Navigation & Header -->
-    <header class="app-header">
-        <div class="brand">
-            <div class="logo-icon">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/>
-                </svg>
-            </div>
-            <div class="brand-text">
-                <div class="brand-title-row">
-                    <h1>NetScope</h1>
-                    <span class="badge badge-academic">CN Lab Mini-Project</span>
+    <div class="app-layout">
+        <!-- Persistent Slim Navigation Sidebar -->
+        <aside class="app-sidebar" id="app-sidebar">
+            <div class="sidebar-top">
+                <div class="sidebar-header">
+                    <a href="#overview" class="brand-anchor" title="NetScope Packet Intelligence">
+                        <div class="brand-symbol">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                <circle cx="12" cy="12" r="3"/>
+                                <path d="M12 2v4M12 18v4M2 12h4M18 12h4"/>
+                                <path d="M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+                            </svg>
+                        </div>
+                        <div class="brand-text-block">
+                            <span class="brand-name">NetScope</span>
+                            <span class="brand-badge">Lab Edition 3.0</span>
+                        </div>
+                    </a>
                 </div>
-                <p class="subtitle">Real-Time Packet Analyzer & Traffic Intelligence</p>
-            </div>
-        </div>
 
-        <div class="header-status-group">
-            <div class="status-indicator">
-                <span class="status-dot status-ready" id="status-dot"></span>
-                <span class="status-text" id="status-text">Ready</span>
-            </div>
-            <div class="mode-badge" id="mode-badge">Mode: Idle</div>
-            <div class="session-badge" id="session-badge" title="Active Capture Session">No Active Session</div>
-        </div>
-
-        <div class="header-actions">
-            <!-- Upload PCAP -->
-            <label class="btn btn-outline btn-sm" for="pcap-file-input" title="Upload an offline PCAP/PCAPNG capture file">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
-                </svg>
-                <span>Upload PCAP</span>
-                <input type="file" id="pcap-file-input" accept=".pcap,.pcapng,.cap" style="display:none;">
-            </label>
-
-            <!-- Load Sample Capture Button -->
-            <button class="btn btn-primary btn-sm" id="btn-load-sample" title="Instantly load pre-generated multi-protocol sample PCAP">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <polygon points="5 3 19 12 5 21 5 3"/>
-                </svg>
-                <span>Load Sample PCAP</span>
-            </button>
-
-            <!-- Compare Captures Button -->
-            <button class="btn btn-outline btn-sm" id="btn-open-compare" title="Compare two PCAP captures side-by-side">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
-                    <polyline points="15 3 21 3 21 9"/>
-                    <line x1="10" y1="14" x2="21" y2="3"/>
-                </svg>
-                <span>Compare</span>
-            </button>
-
-            <!-- Download HTML Intelligence Report Button -->
-            <button class="btn btn-outline btn-sm" id="btn-download-report" title="Generate and view self-contained HTML intelligence report">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                    <polyline points="14 2 14 8 20 8"/>
-                    <line x1="16" y1="13" x2="8" y2="13"/>
-                    <line x1="16" y1="17" x2="8" y2="17"/>
-                    <polyline points="10 9 9 9 8 9"/>
-                </svg>
-                <span>Report</span>
-            </button>
-
-            <!-- Anomaly Threshold Configuration Button -->
-            <button class="btn btn-outline btn-sm" id="btn-open-config" title="Configure Anomaly Detection Heuristic Thresholds">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <circle cx="12" cy="12" r="3"/>
-                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-                </svg>
-                <span>Thresholds</span>
-            </button>
-
-            <!-- Live Capture Controls -->
-            <div class="header-status-group" style="gap:4px;">
-                <select id="interface-select" class="form-select-sm" title="Network Interface">
-                    <option value="">Select Interface...</option>
-                </select>
-                <button class="btn btn-success btn-sm" id="btn-start-live" title="Start Live Capture">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <circle cx="12" cy="12" r="10"/>
-                        <circle cx="12" cy="12" r="3" fill="currentColor"/>
-                    </svg>
-                    <span>Capture</span>
-                </button>
-                <button class="btn btn-danger btn-sm" id="btn-stop-live" title="Stop Live Capture" style="display:none;">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <rect x="6" y="6" width="12" height="12"/>
-                    </svg>
-                    <span>Stop</span>
-                </button>
-            </div>
-
-            <!-- Manual Refresh -->
-            <button class="btn btn-icon" id="btn-refresh" title="Manually refresh dashboard analytics">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                    <path d="M23 4v6h-6M1 20v-6h6"/>
-                    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-                </svg>
-            </button>
-
-            <!-- Light / Dark Theme Switcher -->
-            <button class="theme-toggle" id="btn-theme-toggle" aria-label="Switch between light and dark theme" title="Toggle Light/Dark Theme">
-                <span class="theme-toggle-icon" id="theme-toggle-icon">
-                    <!-- SVG rendered by dashboard.js -->
-                </span>
-                <span class="theme-toggle-label" id="theme-toggle-label">Dark</span>
-            </button>
-        </div>
-    </header>
-
-    <!-- Main Dashboard Container -->
-    <main class="dashboard-container">
-        <!-- Toast / Notification banner -->
-        <div id="notification-banner" class="notification-banner" style="display:none;"></div>
-
-        <!-- Section 1: KPI Summary Metric Cards -->
-        <section class="metrics-grid">
-            <div class="metric-card" title="Total network frames processed in current capture session">
-                <div class="metric-header">
-                    <span class="metric-label">Total Packets</span>
-                </div>
-                <div class="metric-value" id="val-total-packets">0</div>
-                <div class="metric-sub" id="val-processing-pps">Processing: 0 pps</div>
-            </div>
-
-            <div class="metric-card" title="Total byte volume and arithmetic average packet size">
-                <div class="metric-header">
-                    <span class="metric-label">Total Volume</span>
-                </div>
-                <div class="metric-value" id="val-total-bytes">0 B</div>
-                <div class="metric-sub" id="val-avg-packet-size">Avg Size: 0 B</div>
-            </div>
-
-            <div class="metric-card" title="Mean packet rate over capture session duration">
-                <div class="metric-header">
-                    <span class="metric-label">Capture Rate</span>
-                </div>
-                <div class="metric-value" id="val-capture-pps">0 <span class="unit">pps</span></div>
-                <div class="metric-sub" id="val-capture-duration">Span: 0.00s</div>
-            </div>
-
-            <div class="metric-card" title="Network throughput computed as (Total Bytes * 8) / Duration">
-                <div class="metric-header">
-                    <span class="metric-label">Throughput</span>
-                </div>
-                <div class="metric-value" id="val-throughput">0.00 <span class="unit">kbps</span></div>
-                <div class="metric-sub" id="val-throughput-mbps">0.0000 Mbps</div>
-            </div>
-
-            <div class="metric-card" title="Unique IP endpoints and canonical bidirectional 5-tuple conversations">
-                <div class="metric-header">
-                    <span class="metric-label">Hosts & Flows</span>
-                </div>
-                <div class="metric-value" id="val-unique-hosts">0</div>
-                <div class="metric-sub" id="val-active-flows">0 Total Active Flows</div>
-            </div>
-
-            <div class="metric-card" title="Malformed frames vs live sniffer ring buffer overflow drops">
-                <div class="metric-header">
-                    <span class="metric-label">Integrity & Drops</span>
-                </div>
-                <div class="metric-value" id="val-errors-drops">0 / 0</div>
-                <div class="metric-sub">Parsing Errors / Queue Drops</div>
-            </div>
-        </section>
-
-        <!-- Section 2: Visualizations Row (Protocol Breakdown & Traffic Timeline) -->
-        <section class="charts-grid">
-            <!-- Protocol Distribution -->
-            <div class="card chart-card">
-                <div class="card-header">
-                    <div class="card-header-left">
-                        <h2>Protocol Distribution</h2>
-                        <span class="card-subtitle">Layer share breakdown (percentages sum to 100%)</span>
+                <div class="sidebar-nav-container">
+                    <!-- Nav Group: Workspace -->
+                    <div class="nav-group">
+                        <div class="nav-group-title">Workspace</div>
+                        <ul class="nav-list">
+                            <li>
+                                <button class="nav-item-btn active" id="nav-btn-overview" data-target="section-overview">
+                                    <span class="nav-item-left">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <rect x="3" y="3" width="7" height="7"/>
+                                            <rect x="14" y="3" width="7" height="7"/>
+                                            <rect x="14" y="14" width="7" height="7"/>
+                                            <rect x="3" y="14" width="7" height="7"/>
+                                        </svg>
+                                        <span>Overview</span>
+                                    </span>
+                                </button>
+                            </li>
+                            <li>
+                                <button class="nav-item-btn" id="nav-btn-explorer" data-target="section-explorer">
+                                    <span class="nav-item-left">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <line x1="8" y1="6" x2="21" y2="6"/>
+                                            <line x1="8" y1="12" x2="21" y2="12"/>
+                                            <line x1="8" y1="18" x2="21" y2="18"/>
+                                            <line x1="3" y1="6" x2="3.01" y2="6"/>
+                                            <line x1="3" y1="12" x2="3.01" y2="12"/>
+                                            <line x1="3" y1="18" x2="3.01" y2="18"/>
+                                        </svg>
+                                        <span>Packet Stream</span>
+                                    </span>
+                                </button>
+                            </li>
+                            <li>
+                                <button class="nav-item-btn" id="nav-btn-flows" data-target="section-flows">
+                                    <span class="nav-item-left">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <polyline points="17 1 21 5 17 9"/>
+                                            <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                                            <polyline points="7 23 3 19 7 15"/>
+                                            <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                                        </svg>
+                                        <span>Conversations</span>
+                                    </span>
+                                </button>
+                            </li>
+                            <li>
+                                <button class="nav-item-btn" id="nav-btn-alerts" data-target="section-alerts">
+                                    <span class="nav-item-left">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+                                            <line x1="12" y1="9" x2="12" y2="13"/>
+                                            <line x1="12" y1="17" x2="12.01" y2="17"/>
+                                        </svg>
+                                        <span>Intelligence</span>
+                                    </span>
+                                </button>
+                            </li>
+                        </ul>
                     </div>
-                    <div class="card-header-right">
-                        <select id="protocol-layer-select" class="form-select-sm" title="Select OSI / TCP-IP Layer">
-                            <option value="transport" selected>Transport Layer</option>
-                            <option value="network">Network Layer</option>
-                            <option value="application">Application Layer</option>
+
+                    <!-- Nav Group: Analysis & Tools -->
+                    <div class="nav-group">
+                        <div class="nav-group-title">Analysis & Tools</div>
+                        <ul class="nav-list">
+                            <li>
+                                <button class="nav-item-btn" id="btn-sidebar-compare" title="Side-by-side PCAP comparative differential">
+                                    <span class="nav-item-left">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                                            <polyline points="15 3 21 3 21 9"/>
+                                            <line x1="10" y1="14" x2="21" y2="3"/>
+                                        </svg>
+                                        <span>Compare PCAPs</span>
+                                    </span>
+                                </button>
+                            </li>
+                            <li>
+                                <button class="nav-item-btn" id="btn-sidebar-report" title="Generate standalone HTML analysis report">
+                                    <span class="nav-item-left">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                            <polyline points="14 2 14 8 20 8"/>
+                                            <line x1="16" y1="13" x2="8" y2="13"/>
+                                            <line x1="16" y1="17" x2="8" y2="17"/>
+                                        </svg>
+                                        <span>HTML Report</span>
+                                    </span>
+                                </button>
+                            </li>
+                            <li>
+                                <button class="nav-item-btn" id="btn-sidebar-config" title="Configure heuristic anomaly thresholds">
+                                    <span class="nav-item-left">
+                                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <circle cx="12" cy="12" r="3"/>
+                                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                                        </svg>
+                                        <span>Thresholds</span>
+                                    </span>
+                                </button>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar Footer Status & Theme -->
+            <div class="sidebar-footer">
+                <div class="sidebar-status-card">
+                    <div class="sidebar-status-info">
+                        <span class="sidebar-status-dot" id="status-dot"></span>
+                        <span id="status-text">Ready</span>
+                    </div>
+                    <span class="sidebar-engine-tag" id="mode-badge">Mode: Idle</span>
+                </div>
+                <div style="display: flex; align-items: center; justify-content: space-between; padding: 2px 4px;">
+                    <span class="mono" style="font-size: 10px; color: var(--text-muted);">Scapy 2.8 &bull; Py3.13</span>
+                    <button class="theme-toggle" id="btn-theme-toggle" aria-label="Toggle Theme" title="Toggle Light/Dark Theme">
+                        <span id="theme-toggle-icon"></span>
+                        <span id="theme-toggle-label">Theme</span>
+                    </button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Stage -->
+        <div class="app-stage">
+            <!-- Sticky Top Bar -->
+            <header class="app-topbar">
+                <div class="topbar-left">
+                    <h2 class="breadcrumb-title" id="topbar-breadcrumb">Overview</h2>
+                    <div class="topbar-divider"></div>
+                    <div class="active-dataset-pill" title="Current Capture File / Session">
+                        <svg class="dataset-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+                            <polyline points="13 2 13 9 20 9"/>
+                        </svg>
+                        <span class="dataset-name-text" id="session-badge">No Active Session</span>
+                    </div>
+                </div>
+
+                <div class="topbar-right">
+                    <!-- Upload PCAP Button -->
+                    <label class="btn btn-outline btn-sm" for="pcap-file-input" title="Upload PCAP/PCAPNG file">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"/>
+                        </svg>
+                        <span>Upload</span>
+                        <input type="file" id="pcap-file-input" accept=".pcap,.pcapng,.cap" style="display:none;">
+                    </label>
+
+                    <!-- Load Sample PCAP -->
+                    <button class="btn btn-primary btn-sm" id="btn-load-sample" title="Load bundled sample capture">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polygon points="5 3 19 12 5 21 5 3"/>
+                        </svg>
+                        <span>Sample PCAP</span>
+                    </button>
+
+                    <!-- Compare Shortcut -->
+                    <button class="btn btn-outline btn-sm" id="btn-open-compare" title="Compare captures side-by-side">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                            <polyline points="15 3 21 3 21 9"/>
+                            <line x1="10" y1="14" x2="21" y2="3"/>
+                        </svg>
+                        <span>Compare</span>
+                    </button>
+
+                    <!-- Report Shortcut -->
+                    <button class="btn btn-outline btn-sm" id="btn-download-report" title="Generate HTML intelligence report">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <polyline points="14 2 14 8 20 8"/>
+                            <line x1="16" y1="13" x2="8" y2="13"/>
+                        </svg>
+                        <span>Report</span>
+                    </button>
+
+                    <!-- Thresholds Shortcut -->
+                    <button class="btn btn-outline btn-sm" id="btn-open-config" title="Configure detection thresholds">
+                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="3"/>
+                            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                        </svg>
+                        <span>Thresholds</span>
+                    </button>
+
+                    <!-- Live Capture Selector -->
+                    <div style="display:flex; align-items:center; gap:4px;">
+                        <select id="interface-select" class="form-select form-select-sm" title="Select Network Interface">
+                            <option value="">Interface...</option>
                         </select>
+                        <button class="btn btn-success btn-sm" id="btn-start-live" title="Start Live Capture">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <circle cx="12" cy="12" r="3" fill="currentColor"/>
+                            </svg>
+                            <span>Live</span>
+                        </button>
+                        <button class="btn btn-danger btn-sm" id="btn-stop-live" title="Stop Live Capture" style="display:none;">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <rect x="6" y="6" width="12" height="12"/>
+                            </svg>
+                            <span>Stop</span>
+                        </button>
                     </div>
-                </div>
-                <div class="card-body">
-                    <div id="chart-protocols" class="chart-container"></div>
-                    <div id="protocol-legend-table" class="protocol-table-wrapper"></div>
-                </div>
-            </div>
 
-            <!-- Traffic Timeline -->
-            <div class="card chart-card">
-                <div class="card-header">
-                    <div class="card-header-left">
-                        <h2>Traffic Timeline & Throughput</h2>
-                        <span class="card-subtitle">Chronological 1-second arrival rate and bandwidth</span>
-                    </div>
-                    <div class="card-header-right">
-                        <button class="btn btn-outline btn-xs" id="btn-toggle-timeline-unit">Switch Metric (PPS / Kbps)</button>
-                    </div>
+                    <!-- Refresh Button -->
+                    <button class="btn btn-icon" id="btn-refresh" title="Refresh metrics">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M23 4v6h-6M1 20v-6h6"/>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                        </svg>
+                    </button>
                 </div>
-                <div class="card-body">
-                    <div id="chart-timeline" class="chart-container"></div>
-                </div>
-            </div>
-        </section>
+            </header>
 
-        <!-- Section 3: Traffic Intelligence (Top Talkers & Canonical Flows) -->
-        <section class="intelligence-grid">
-            <!-- Top Talkers -->
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-header-left">
-                        <h2>Top Talkers (Host Endpoints)</h2>
-                        <span class="card-subtitle">Ranked by transmitted volume and packet frequency</span>
+            <!-- Main Scrollable Workspace -->
+            <main class="app-main">
+                <!-- Toast Notification Banner -->
+                <div id="notification-banner" class="notification-banner" style="display:none;"></div>
+
+                <!-- SECTION: OVERVIEW -->
+                <div id="section-overview" class="view-section">
+                    <!-- Capture Context Banner -->
+                    <div class="capture-context-banner">
+                        <div class="context-meta-left">
+                            <div class="context-icon-wrap">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>
+                                </svg>
+                            </div>
+                            <div class="context-title-group">
+                                <div class="context-filename">
+                                    <span>Active Capture:</span>
+                                    <code id="active-filename-display">sample_traffic.pcap</code>
+                                </div>
+                                <div class="context-subline">
+                                    <span><strong id="val-context-packets">0</strong> frames</span>
+                                    <span>&bull;</span>
+                                    <span><strong id="val-context-bytes">0 B</strong> wire octets</span>
+                                    <span>&bull;</span>
+                                    <span><strong id="val-context-span">0.00s</strong> capture duration</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="context-actions-right">
+                            <span class="mono" style="font-size: 11px; color: var(--text-muted);" id="val-processing-pps">Processing: 0.0 pps</span>
+                        </div>
                     </div>
-                    <div class="card-header-right">
-                        <div class="tab-group" id="talker-tabs">
-                            <button class="tab-btn active" data-tab="sources">Sources</button>
-                            <button class="tab-btn" data-tab="destinations">Destinations</button>
-                            <button class="tab-btn" data-tab="ports">Top Ports</button>
+
+                    <!-- Summary Metrics Band (Scorecards) -->
+                    <div class="metrics-band" style="margin-top: 14px;">
+                        <!-- Metric 1: Ingested Traffic -->
+                        <div class="scorecard-card">
+                            <div class="scorecard-label">Ingested Traffic</div>
+                            <div class="scorecard-hero">
+                                <span class="scorecard-val" id="val-total-packets">0</span>
+                                <span class="scorecard-unit">pkts</span>
+                            </div>
+                            <div class="scorecard-sub">
+                                <span class="mono" id="val-total-bytes">0 B</span>
+                                <span>&bull;</span>
+                                <span class="mono" id="val-avg-packet-size">Avg: 0 B</span>
+                            </div>
+                        </div>
+
+                        <!-- Metric 2: Network Activity Rates -->
+                        <div class="scorecard-card">
+                            <div class="scorecard-label">Capture Rate & Span</div>
+                            <div class="scorecard-hero">
+                                <span class="scorecard-val" id="val-capture-pps">0.00</span>
+                                <span class="scorecard-unit">pps</span>
+                            </div>
+                            <div class="scorecard-sub">
+                                <span class="mono" id="val-capture-duration">Span: 0.00s</span>
+                            </div>
+                        </div>
+
+                        <!-- Metric 3: Throughput Volume -->
+                        <div class="scorecard-card">
+                            <div class="scorecard-label">Network Throughput</div>
+                            <div class="scorecard-hero">
+                                <span class="scorecard-val" id="val-throughput">0.00</span>
+                                <span class="scorecard-unit">kbps</span>
+                            </div>
+                            <div class="scorecard-sub">
+                                <span class="mono" id="val-throughput-mbps">0.0000 Mbps</span>
+                            </div>
+                        </div>
+
+                        <!-- Metric 4: Hosts, Flows & Diagnostics -->
+                        <div class="scorecard-card">
+                            <div class="scorecard-label">Scope & Health</div>
+                            <div class="scorecard-hero">
+                                <span class="scorecard-val" id="val-unique-hosts">0</span>
+                                <span class="scorecard-unit">hosts</span>
+                            </div>
+                            <div class="scorecard-sub">
+                                <span class="mono" id="val-active-flows">0 Flows</span>
+                                <span>&bull;</span>
+                                <span class="mono" id="val-errors-drops">0 / 0 Err</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Visualizations Row (Traffic Timeline & Protocol Breakdown) -->
+                    <div class="charts-grid" style="margin-top: 16px;">
+                        <!-- Timeline Chart Panel -->
+                        <div class="panel-card">
+                            <div class="panel-card-header">
+                                <div class="panel-title-group">
+                                    <h3 class="panel-title">Traffic Progression Timeline</h3>
+                                    <span class="panel-subtitle">Activity time series over observation span</span>
+                                </div>
+                                <button class="btn btn-outline btn-sm" id="btn-toggle-timeline-unit" title="Switch metric between Packets/Sec and Throughput">
+                                    <span id="timeline-unit-label">Show kbps</span>
+                                </button>
+                            </div>
+                            <div class="panel-card-body">
+                                <div id="chart-timeline" style="width: 100%; height: 260px;"></div>
+                            </div>
+                        </div>
+
+                        <!-- Protocol Distribution Panel -->
+                        <div class="panel-card">
+                            <div class="panel-card-header">
+                                <div class="panel-title-group">
+                                    <h3 class="panel-title">Protocol Distribution</h3>
+                                    <span class="panel-subtitle">Layer composition (sums to 100%)</span>
+                                </div>
+                                <select id="protocol-layer-select" class="form-select form-select-sm">
+                                    <option value="transport" selected>Transport Layer</option>
+                                    <option value="network">Network Layer</option>
+                                    <option value="application">Application Layer</option>
+                                </select>
+                            </div>
+                            <div class="panel-card-body">
+                                <div id="chart-protocols" style="width: 100%; height: 160px;"></div>
+                                <div id="protocol-legend-table"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Two-Column Analysis Grid (Top Talkers & Alerts) -->
+                    <div class="analysis-grid" style="margin-top: 16px;">
+                        <!-- Top Talkers Panel -->
+                        <div class="panel-card">
+                            <div class="panel-card-header">
+                                <div class="panel-title-group">
+                                    <h3 class="panel-title">Top Traffic Endpoints</h3>
+                                    <span class="panel-subtitle">Volumetric aggregation by host</span>
+                                </div>
+                                <div class="segmented-tabs" id="talker-tabs">
+                                    <button class="tab-btn active" data-tab="sources">Sources</button>
+                                    <button class="tab-btn" data-tab="destinations">Destinations</button>
+                                    <button class="tab-btn" data-tab="hosts">Hosts</button>
+                                </div>
+                            </div>
+                            <div class="panel-card-body" style="padding: 0;">
+                                <div class="table-responsive">
+                                    <table class="clean-table" id="top-talkers-table">
+                                        <thead id="top-talkers-thead">
+                                            <tr>
+                                                <th>IP Address</th>
+                                                <th style="text-align: right;">Packets</th>
+                                                <th style="text-align: right;">Volume</th>
+                                                <th>Share</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="top-talkers-tbody">
+                                            <tr><td colspan="4" class="empty-state-notice">Awaiting packet telemetry...</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Security & Heuristic Alerts Panel -->
+                        <div class="panel-card" id="section-alerts">
+                            <div class="panel-card-header">
+                                <div class="panel-title-group">
+                                    <h3 class="panel-title">Heuristic Security Intelligence</h3>
+                                    <span class="panel-subtitle">Observable anomalies vs baseline thresholds</span>
+                                </div>
+                                <div style="display: flex; align-items: center; gap: 8px;">
+                                    <span class="badge badge-heuristic" id="alert-count-badge">0 Alerts</span>
+                                    <button class="btn btn-ghost btn-sm" id="btn-quick-config" title="Adjust detection thresholds">Tune</button>
+                                </div>
+                            </div>
+                            <div class="panel-card-body">
+                                <div class="alerts-list" id="alerts-container">
+                                    <div class="empty-state-notice">No heuristic anomalies or threshold violations detected.</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
-                <div class="card-body" style="padding:0;">
-                    <div class="table-viewport-compact">
-                        <table class="data-table" id="table-top-talkers">
-                            <thead>
-                                <tr id="top-talkers-thead">
-                                    <th>IP Address</th>
-                                    <th>Packets</th>
-                                    <th>Volume</th>
-                                </tr>
-                            </thead>
-                            <tbody id="top-talkers-tbody">
-                                <tr><td colspan="3" class="text-center text-muted">No talker data available.</td></tr>
-                            </tbody>
-                        </table>
+
+                <!-- SECTION: PACKET STREAM EXPLORER -->
+                <div id="section-explorer" class="explorer-section" style="margin-top: 10px;">
+                    <!-- Filter Toolbar -->
+                    <div class="explorer-toolbar">
+                        <div class="toolbar-row">
+                            <div class="search-input-wrap">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"/>
+                                    <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                </svg>
+                                <input type="text" id="filter-search" class="form-input form-input-sm" placeholder="Filter by summary, protocol, IP, or flow ID...">
+                            </div>
+
+                            <div class="filter-inputs-group">
+                                <select id="filter-protocol" class="form-select form-select-sm" title="Protocol Filter">
+                                    <option value="">All Protocols</option>
+                                    <option value="TCP">TCP</option>
+                                    <option value="UDP">UDP</option>
+                                    <option value="ARP">ARP</option>
+                                    <option value="DNS">DNS</option>
+                                    <option value="ICMP">ICMP</option>
+                                    <option value="HTTP">HTTP</option>
+                                    <option value="TLS">TLS</option>
+                                    <option value="IPv4">IPv4</option>
+                                    <option value="IPv6">IPv6</option>
+                                </select>
+                                <input type="text" id="filter-src-ip" class="form-input form-input-sm" placeholder="Source IP">
+                                <input type="text" id="filter-dst-ip" class="form-input form-input-sm" placeholder="Dest IP">
+                                <input type="number" id="filter-src-port" class="form-input form-input-sm" style="width: 75px;" placeholder="Sport">
+                                <input type="number" id="filter-dst-port" class="form-input form-input-sm" style="width: 75px;" placeholder="Dport">
+                                <input type="number" id="filter-pkt-id" class="form-input form-input-sm" style="width: 70px;" placeholder="Frame #">
+                            </div>
+
+                            <div style="display: flex; align-items: center; gap: 6px;">
+                                <button class="btn btn-outline btn-sm" id="btn-reset-filters" title="Reset all packet filters">Reset</button>
+                                <button class="btn btn-outline btn-sm" id="btn-export-csv" title="Export filtered records as RFC 4180 CSV">
+                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
+                                    </svg>
+                                    <span>Export CSV</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Active Filter Indicators -->
+                        <div class="active-filter-chips">
+                            <span id="packet-filter-count">Showing 0 of 0 packets</span>
+                            <span id="active-flow-badge" style="display: none;" class="badge badge-heuristic">
+                                Filtered to Flow: <code id="active-flow-id"></code>
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Technical Packet Table -->
+                    <div class="packet-table-wrapper">
+                        <div class="table-responsive">
+                            <table class="packet-grid-table">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 50px;">#</th>
+                                        <th style="width: 90px;">Time (+rel)</th>
+                                        <th style="width: 140px;">Source</th>
+                                        <th style="width: 24px; text-align: center;">&rarr;</th>
+                                        <th style="width: 140px;">Destination</th>
+                                        <th style="width: 75px;">Protocol</th>
+                                        <th style="width: 65px; text-align: right;">Len</th>
+                                        <th style="width: 90px;">TCP Flags</th>
+                                        <th>Summary</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="packet-table-body">
+                                    <tr><td colspan="9" class="empty-state-notice">Awaiting packet stream...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <!-- Pagination Footer -->
+                        <div class="pagination-bar">
+                            <div id="pagination-info">Page 1 of 1</div>
+                            <div class="pagination-controls">
+                                <select id="page-size-select" class="form-select form-select-sm" style="width: auto;">
+                                    <option value="25">25 / page</option>
+                                    <option value="50" selected>50 / page</option>
+                                    <option value="100">100 / page</option>
+                                </select>
+                                <button class="btn btn-outline btn-sm" id="btn-prev-page">Prev</button>
+                                <span class="mono" id="page-display" style="padding: 0 4px;">1</span>
+                                <button class="btn btn-outline btn-sm" id="btn-next-page">Next</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Network Flows -->
-            <div class="card">
-                <div class="card-header">
-                    <div class="card-header-left">
-                        <h2>Canonical Network Flows (Conversations)</h2>
-                        <span class="card-subtitle">Bidirectional 5-tuple sessions tracked by volume</span>
+                <!-- SECTION: CONVERSATION FLOWS -->
+                <div id="section-flows" class="panel-card" style="margin-top: 10px;">
+                    <div class="panel-card-header">
+                        <div class="panel-title-group">
+                            <h3 class="panel-title">Bidirectional 5-Tuple Conversation Flows</h3>
+                            <span class="panel-subtitle">Symmetric connection tracking and TCP state machine reconstruction</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="badge badge-heuristic" id="flow-count-badge">0 Flows</span>
+                            <select id="flow-limit-select" class="form-select form-select-sm">
+                                <option value="10" selected>Top 10 Flows</option>
+                                <option value="20">Top 20 Flows</option>
+                                <option value="50">Top 50 Flows</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="card-header-right">
-                        <span class="badge" id="flow-count-badge">0 Flows</span>
-                        <select id="flow-limit-select" class="form-select-sm" title="Flows to display">
-                            <option value="10" selected>Top 10</option>
-                            <option value="25">Top 25</option>
-                            <option value="50">Top 50</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="card-body" style="padding:0;">
-                    <div class="table-viewport-compact">
-                        <table class="data-table" id="table-flows">
-                            <thead>
-                                <tr>
-                                    <th>Flow ID</th>
-                                    <th>Endpoints (A &harr; B)</th>
-                                    <th>Proto</th>
-                                    <th>Duration</th>
-                                    <th>Packets</th>
-                                    <th>Volume</th>
-                                    <th>State</th>
-                                    <th>Action</th>
-                                </tr>
-                            </thead>
-                            <tbody id="flows-tbody">
-                                <tr><td colspan="8" class="text-center text-muted">No flows recorded.</td></tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Section 4: Security & Traffic Anomalies -->
-        <section class="card alert-card-section">
-            <div class="card-header">
-                <div class="card-header-left">
-                    <h2>Traffic Anomaly & Security Intelligence</h2>
-                    <span class="card-subtitle">Deterministic heuristics distinguishing observable facts from unconfirmed suspicions</span>
-                </div>
-                <div class="card-header-right">
-                    <span class="badge badge-warning" id="alert-count-badge">0 Alerts</span>
-                    <button class="btn btn-outline btn-xs" id="btn-quick-config" title="Adjust threshold parameters">Tuning</button>
-                </div>
-            </div>
-            <div class="card-body">
-                <div id="alerts-container" class="alerts-list">
-                    <div class="empty-state">No anomalies or heuristic threshold violations detected.</div>
-                </div>
-            </div>
-        </section>
-
-        <!-- Section 5: Interactive Packet Explorer -->
-        <section class="card packet-explorer-card">
-            <div class="card-header explorer-header">
-                <div class="explorer-title-group">
-                    <h2>Packet Explorer</h2>
-                    <span class="badge" id="packet-filter-count">Showing 0 packets</span>
-                    <span id="active-flow-badge" class="badge badge-academic" style="display:none; cursor:pointer;" title="Click to clear conversation filter">
-                        Conversation: <strong id="active-flow-id"></strong> &times;
-                    </span>
-                </div>
-
-                <!-- Filter Controls Bar -->
-                <div class="filter-toolbar">
-                    <div class="filter-search-wrap">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="11" cy="11" r="8"/>
-                            <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                        </svg>
-                        <input type="text" id="filter-search" class="form-input" placeholder="Search IP, summary...">
-                    </div>
-                    
-                    <select id="filter-protocol" class="form-select-sm">
-                        <option value="">All Protocols</option>
-                        <option value="TCP">TCP</option>
-                        <option value="UDP">UDP</option>
-                        <option value="ICMP">ICMP</option>
-                        <option value="ARP">ARP</option>
-                        <option value="DNS">DNS</option>
-                        <option value="HTTP">HTTP</option>
-                        <option value="TLS">TLS</option>
-                        <option value="IPv6">IPv6</option>
-                    </select>
-
-                    <input type="number" id="filter-pkt-id" class="form-input form-input-xs" placeholder="Pkt #" title="Exact Packet Number">
-                    <input type="text" id="filter-src-ip" class="form-input form-input-sm" placeholder="Src IP">
-                    <input type="text" id="filter-dst-ip" class="form-input form-input-sm" placeholder="Dst IP">
-                    <input type="number" id="filter-src-port" class="form-input form-input-xs" placeholder="Src Port" title="Source Port">
-                    <input type="number" id="filter-dst-port" class="form-input form-input-xs" placeholder="Dst Port" title="Destination Port">
-
-                    <button class="btn btn-outline btn-sm" id="btn-reset-filters" title="Reset all active filters">Reset</button>
-                    <button class="btn btn-secondary btn-sm" id="btn-export-csv" title="Export filtered packets to RFC 4180 CSV">
-                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>
-                        </svg>
-                        <span>Export CSV</span>
-                    </button>
-                </div>
-            </div>
-
-            <div class="card-body" style="padding: 12px 18px;">
-                <div class="table-viewport-explorer">
-                    <table class="data-table packet-table" id="packet-table">
-                        <thead>
-                            <tr>
-                                <th data-sort="packet_id" title="Packet Index">#</th>
-                                <th>Flow</th>
-                                <th data-sort="timestamp" title="UTC Timestamp">Time (UTC)</th>
-                                <th>Rel (s)</th>
-                                <th data-sort="source_ip">Source</th>
-                                <th data-sort="destination_ip">Destination</th>
-                                <th>Net</th>
-                                <th>Trans</th>
-                                <th>App</th>
-                                <th data-sort="packet_length">Length</th>
-                                <th>Flags</th>
-                                <th>Protocol Summary</th>
-                            </tr>
-                        </thead>
-                        <tbody id="packet-table-body">
-                            <tr><td colspan="12" class="text-center text-muted">No packets loaded. Upload a PCAP or click "Load Sample PCAP".</td></tr>
-                        </tbody>
-                    </table>
-                </div>
-
-                <!-- Pagination Bar -->
-                <div class="pagination-bar">
-                    <div class="pagination-info" id="pagination-info">Page 1 of 1 (0 total packets)</div>
-                    <div class="pagination-actions">
-                        <button class="btn btn-outline btn-sm" id="btn-prev-page" disabled>Previous</button>
-                        <span id="page-display" class="page-display">1</span>
-                        <button class="btn btn-outline btn-sm" id="btn-next-page" disabled>Next</button>
-                        <select id="page-size-select" class="form-select-sm" title="Packets per page">
-                            <option value="25">25 / page</option>
-                            <option value="50" selected>50 / page</option>
-                            <option value="100">100 / page</option>
-                        </select>
+                    <div class="panel-card-body" style="padding: 0;">
+                        <div class="table-responsive">
+                            <table class="clean-table" id="flows-table">
+                                <thead>
+                                    <tr>
+                                        <th>Flow ID</th>
+                                        <th>Endpoint A</th>
+                                        <th style="text-align: center;">&harr;</th>
+                                        <th>Endpoint B</th>
+                                        <th>Protocol</th>
+                                        <th>TCP State</th>
+                                        <th style="text-align: right;">Packets</th>
+                                        <th style="text-align: right;">Volume</th>
+                                        <th style="text-align: right;">Duration</th>
+                                        <th style="text-align: center;">Action</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="flows-tbody">
+                                    <tr><td colspan="10" class="empty-state-notice">Awaiting flow aggregation...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
-            </div>
-        </section>
-    </main>
+            </main>
+        </div>
+    </div>
 
-    <!-- Packet Details / Protocol Inspector Modal -->
-    <div id="packet-detail-modal" class="modal-overlay" style="display:none;">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 id="modal-packet-title">Protocol Layer Inspector</h3>
-                <button class="modal-close" id="btn-close-modal" aria-label="Close modal">&times;</button>
+    <!-- ======================================================================
+         MODALS & DRAWERS
+         ====================================================================== -->
+
+    <!-- Modal 1: Packet Protocol Inspector -->
+    <div class="modal-backdrop" id="packet-detail-modal" style="display:none;">
+        <div class="modal-sheet" style="width: 820px;">
+            <div class="modal-sheet-header">
+                <div class="modal-title-wrap">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                        <polyline points="2 17 12 22 22 17"/>
+                        <polyline points="2 12 12 17 22 12"/>
+                    </svg>
+                    <h3 class="modal-title-text" id="modal-packet-title">Packet Inspection</h3>
+                </div>
+                <button class="btn btn-ghost btn-sm" id="btn-close-modal" aria-label="Close Inspector">&times;</button>
             </div>
-            <div class="modal-body" id="modal-packet-body">
-                <!-- Dynamically populated layers -->
+            <div class="modal-sheet-body" id="modal-packet-body">
+                <!-- Injected via dashboard.js -->
+            </div>
+            <div class="modal-sheet-footer">
+                <button class="btn btn-outline btn-sm" onclick="document.getElementById('packet-detail-modal').style.display='none'">Close</button>
             </div>
         </div>
     </div>
 
-    <!-- Anomaly Threshold Configuration Modal -->
-    <div id="config-modal" class="modal-overlay" style="display:none;">
-        <div class="modal-content" style="max-width: 580px;">
-            <div class="modal-header">
-                <h3>Anomaly Detection Heuristics Tuning</h3>
-                <button class="modal-close" id="btn-close-config" aria-label="Close configuration">&times;</button>
-            </div>
-            <div class="modal-body">
-                <p style="font-size:12px; color:var(--text-secondary); line-height:1.4;">
-                    Configure deterministic heuristic parameters below. Changing these thresholds dynamically adjusts the rule evaluation engine without modifying recorded packet data.
-                </p>
-                <div id="config-error-msg" style="display:none; color:var(--accent-rose); font-size:11px; padding:6px 10px; background:var(--severity-high-bg); border-radius:4px; border:1px solid var(--severity-high-border);"></div>
-                <div style="display:flex; flex-direction:column; gap:10px;">
-                    <div class="field-row">
-                        <span class="field-key">SYN Burst Threshold (SYNs in 5.0s window):</span>
-                        <input type="number" id="cfg-syn-flood" class="form-input form-input-sm" min="3" max="1000">
-                    </div>
-                    <div class="field-row">
-                        <span class="field-key">Port Scan Threshold (Probed ports in 5.0s window):</span>
-                        <input type="number" id="cfg-port-scan" class="form-input form-input-sm" min="2" max="1000">
-                    </div>
-                    <div class="field-row">
-                        <span class="field-key">Packet Rate Spike Threshold (Packets / Sec):</span>
-                        <input type="number" id="cfg-packet-rate" class="form-input form-input-sm" min="10" max="50000">
-                    </div>
-                    <div class="field-row">
-                        <span class="field-key">Bandwidth Threshold (Bytes / Sec):</span>
-                        <input type="number" id="cfg-byte-rate" class="form-input form-input-sm" min="1000" max="100000000">
-                    </div>
-                    <div class="field-row">
-                        <span class="field-key">Dominant Host Volume Ratio (0.1 to 1.0):</span>
-                        <input type="number" id="cfg-host-ratio" class="form-input form-input-sm" min="0.1" max="1.0" step="0.05">
-                    </div>
-                    <div class="field-row">
-                        <span class="field-key">Alert Cooldown Window (Seconds):</span>
-                        <input type="number" id="cfg-cooldown" class="form-input form-input-sm" min="1" max="120">
+    <!-- Modal 2: TCP Conversation Timeline Inspector -->
+    <div class="modal-backdrop" id="modal-tcp-conversation" style="display:none;">
+        <div class="modal-sheet" style="width: 960px;">
+            <div class="modal-sheet-header">
+                <div class="modal-title-wrap">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="17 1 21 5 17 9"/>
+                        <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+                        <polyline points="7 23 3 19 7 15"/>
+                        <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+                    </svg>
+                    <div>
+                        <h3 class="modal-title-text" id="modal-flow-title">TCP Conversation Inspector</h3>
+                        <span style="font-size: 11px; color: var(--text-muted);" id="modal-flow-subtitle">Chronological Ladder Diagram</span>
                     </div>
                 </div>
-                <div style="margin-top:14px; display:flex; justify-content:flex-end; gap:8px;">
-                    <button class="btn btn-outline btn-sm" id="btn-cancel-config">Cancel</button>
-                    <button class="btn btn-primary btn-sm" id="btn-save-config">Save Thresholds</button>
-                </div>
+                <button class="btn btn-ghost btn-sm" id="btn-close-flow-timeline">&times;</button>
             </div>
-        </div>
-    </div>
-
-    <!-- TCP Conversation Inspector Modal -->
-    <div id="modal-tcp-conversation" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="modal-flow-title">
-        <div class="modal-content" style="max-width: 880px; max-height: 88vh; display:flex; flex-direction:column;">
-            <div class="modal-header">
-                <div>
-                    <h3 id="modal-flow-title">TCP Conversation Inspector</h3>
-                    <p id="modal-flow-subtitle" style="font-size:12px; color:var(--text-secondary); margin-top:2px; font-family:var(--font-mono);"></p>
-                </div>
-                <button class="modal-close" id="btn-close-flow-timeline" aria-label="Close conversation inspector">&times;</button>
-            </div>
-            <div class="modal-body" style="overflow-y:auto; padding:16px 20px;">
-                <!-- Summary Chips -->
-                <div class="flow-scorecard-grid" style="margin-bottom:14px;">
-                    <div class="scorecard-chip">
-                        <span class="chip-label">Handshake Status</span>
-                        <span class="chip-val" id="flow-chip-handshake">Checking...</span>
-                    </div>
-                    <div class="scorecard-chip">
-                        <span class="chip-label">TCP State</span>
-                        <span class="chip-val" id="flow-chip-state">Checking...</span>
-                    </div>
-                    <div class="scorecard-chip">
-                        <span class="chip-label">Retransmissions</span>
-                        <span class="chip-val" id="flow-chip-retrans">0</span>
-                    </div>
-                    <div class="scorecard-chip">
-                        <span class="chip-label">Packets / Volume</span>
-                        <span class="chip-val" id="flow-chip-volume">0 pkts</span>
-                    </div>
-                    <div class="scorecard-chip">
-                        <span class="chip-label">Duration</span>
-                        <span class="chip-val" id="flow-chip-duration">0.00s</span>
-                    </div>
+            <div class="modal-sheet-body">
+                <!-- Scorecard Chips -->
+                <div class="flow-scorecard-band">
+                    <span class="flow-scorecard-chip" id="flow-chip-handshake">Handshake: Pending</span>
+                    <span class="flow-scorecard-chip" id="flow-chip-state">State: INIT</span>
+                    <span class="flow-scorecard-chip" id="flow-chip-retrans">Retransmissions: 0</span>
+                    <span class="flow-scorecard-chip" id="flow-chip-volume">Volume: 0 B</span>
+                    <span class="flow-scorecard-chip" id="flow-chip-duration">Duration: 0.00s</span>
+                    <button class="btn btn-outline btn-sm" id="btn-flow-filter-explorer" style="margin-left: auto;">Filter Packet Stream</button>
                 </div>
 
-                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                    <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-secondary);">Chronological Conversation Progression</h4>
-                    <button class="btn btn-outline btn-xs" id="btn-flow-filter-explorer">
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
-                        <span>Filter Explorer to this Flow</span>
-                    </button>
-                </div>
-
-                <!-- Timeline / Event Ladder -->
-                <div class="table-viewport" style="max-height: 400px; border:1px solid var(--border-default); border-radius:var(--radius-md);">
-                    <table class="data-table" id="table-flow-timeline">
+                <!-- Event Ladder -->
+                <div class="table-responsive" style="max-height: 480px;">
+                    <table class="ladder-table">
                         <thead>
                             <tr>
-                                <th>Rel Time</th>
+                                <th>#</th>
+                                <th>Relative Time</th>
                                 <th>Direction</th>
-                                <th>Event / Flags</th>
+                                <th>Event</th>
+                                <th>Flags</th>
                                 <th>Sequence #</th>
                                 <th>Ack #</th>
-                                <th>Len</th>
-                                <th>Frame Ref</th>
+                                <th style="text-align: right;">Len</th>
+                                <th>Retrans</th>
+                                <th>Action</th>
                             </tr>
                         </thead>
                         <tbody id="flow-timeline-tbody">
-                            <tr><td colspan="7" class="text-center text-muted">Loading conversation events...</td></tr>
+                            <!-- Populated dynamically via dashboard.js -->
                         </tbody>
                     </table>
                 </div>
             </div>
+            <div class="modal-sheet-footer">
+                <button class="btn btn-outline btn-sm" onclick="document.getElementById('modal-tcp-conversation').style.display='none'">Close</button>
+            </div>
         </div>
     </div>
 
-    <!-- Capture Comparison Modal -->
-    <div id="modal-compare" class="modal-overlay" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="modal-compare-title">
-        <div class="modal-content" style="max-width: 960px; max-height: 90vh; display:flex; flex-direction:column;">
-            <div class="modal-header">
-                <div>
-                    <h3 id="modal-compare-title">Capture Comparison &amp; Differential Analysis</h3>
-                    <p style="font-size:12px; color:var(--text-secondary); margin-top:2px;">Compare metrics, throughput variance, and protocol shifts side-by-side</p>
+    <!-- Modal 3: Differential Capture Comparison -->
+    <div class="modal-backdrop" id="modal-compare" style="display:none;">
+        <div class="modal-sheet" style="width: 920px;">
+            <div class="modal-sheet-header">
+                <div class="modal-title-wrap">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                        <polyline points="15 3 21 3 21 9"/>
+                        <line x1="10" y1="14" x2="21" y2="3"/>
+                    </svg>
+                    <h3 class="modal-title-text">Differential Capture Comparison</h3>
                 </div>
-                <button class="modal-close" id="btn-close-compare" aria-label="Close comparison">&times;</button>
+                <button class="btn btn-ghost btn-sm" id="btn-close-compare">&times;</button>
             </div>
-            <div class="modal-body" style="overflow-y:auto; padding:16px 20px;">
+            <div class="modal-sheet-body">
                 <!-- Comparison Controls -->
-                <div style="background:var(--bg-surface-elevated); padding:14px 16px; border-radius:var(--radius-md); border:1px solid var(--border-subtle); margin-bottom:16px; display:flex; flex-wrap:wrap; justify-content:space-between; align-items:center; gap:12px;">
+                <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px; background: var(--bg-surface-subtle); border-radius: 6px; border: 1px solid var(--border-subtle);">
                     <div>
-                        <strong style="font-size:13px; color:var(--text-primary);">Compare Active Session With:</strong>
-                        <p style="font-size:11px; color:var(--text-secondary);">Select a secondary capture file or benchmark baseline</p>
+                        <div style="font-weight: 600; font-size: 12.5px;">A/B Differential Analysis</div>
+                        <span style="font-size: 11px; color: var(--text-muted);">Compare active capture session against a reference PCAP dataset</span>
                     </div>
-                    <div style="display:flex; gap:8px; align-items:center;">
-                        <button class="btn btn-outline btn-sm" id="btn-compare-with-sample">
-                            <span>Compare with Baseline Sample</span>
-                        </button>
-                        <label class="btn btn-primary btn-sm" for="compare-file-input">
-                            <span>Upload Capture B (.pcap)</span>
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <button class="btn btn-primary btn-sm" id="btn-compare-with-sample">Compare with Baseline Sample</button>
+                        <label class="btn btn-outline btn-sm" for="compare-file-input">
+                            <span>Upload Second PCAP</span>
                             <input type="file" id="compare-file-input" accept=".pcap,.pcapng,.cap" style="display:none;">
                         </label>
                     </div>
                 </div>
 
-                <!-- Warning banner container -->
-                <div id="compare-warning-banner" style="display:none; margin-bottom:14px; padding:10px 14px; border-radius:var(--radius-md); font-size:12px; line-height:1.4; background:rgba(245,158,11,0.1); border:1px solid #f59e0b; color:var(--accent-amber);"></div>
+                <!-- Disparate Duration Warning Banner -->
+                <div id="compare-warning-banner" class="notification-banner warning" style="display:none; position: static; margin-top: 4px;"></div>
 
-                <!-- Comparison Results Container -->
-                <div id="compare-results" style="display:none;">
-                    <!-- Capture Names Scorecard -->
-                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px;">
-                        <div class="kpi-card" style="border-left:3px solid var(--accent-primary);">
-                            <div class="kpi-title" id="cmp-label-a">Capture A (Baseline)</div>
-                            <div class="kpi-value" id="cmp-name-a" style="font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Active Capture</div>
-                        </div>
-                        <div class="kpi-card" style="border-left:3px solid var(--accent-emerald);">
-                            <div class="kpi-title" id="cmp-label-b">Capture B (Target)</div>
-                            <div class="kpi-value" id="cmp-name-b" style="font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Secondary Capture</div>
-                        </div>
+                <!-- Results Section -->
+                <div id="compare-results" style="display: none; display: flex; flex-direction: column; gap: 14px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 600;">
+                        <span>Capture A: <code id="cmp-name-a"></code></span>
+                        <span>vs</span>
+                        <span>Capture B: <code id="cmp-name-b"></code></span>
                     </div>
 
-                    <!-- Metrics Differential Table -->
-                    <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-secondary); margin-bottom:6px;">Key Metrics Variance</h4>
-                    <div class="table-viewport" style="margin-bottom:16px; border:1px solid var(--border-default); border-radius:var(--radius-md);">
-                        <table class="data-table" id="table-compare-metrics">
+                    <!-- Metrics Table -->
+                    <div class="table-responsive">
+                        <table class="clean-table">
                             <thead>
                                 <tr>
-                                    <th>Metric</th>
-                                    <th>Capture A</th>
-                                    <th>Capture B</th>
-                                    <th>Absolute Delta</th>
-                                    <th>Percentage Shift</th>
+                                    <th>Telemetry Metric</th>
+                                    <th style="text-align: right;">Capture A</th>
+                                    <th style="text-align: right;">Capture B</th>
+                                    <th style="text-align: right;">Delta (&Delta;)</th>
+                                    <th style="text-align: right;">Change (%)</th>
                                 </tr>
                             </thead>
                             <tbody id="compare-metrics-tbody"></tbody>
                         </table>
                     </div>
 
-                    <!-- Protocol Shift Table -->
-                    <h4 style="font-size:12px; text-transform:uppercase; letter-spacing:0.5px; color:var(--text-secondary); margin-bottom:6px;">Protocol Distribution Shifts</h4>
-                    <div class="table-viewport" style="border:1px solid var(--border-default); border-radius:var(--radius-md);">
-                        <table class="data-table" id="table-compare-protocols">
+                    <!-- Protocol Shift Breakdown -->
+                    <h4 style="font-size: 12px; font-weight: 600; margin-top: 6px;">Protocol Percentage Shifts</h4>
+                    <div class="table-responsive">
+                        <table class="clean-table">
                             <thead>
                                 <tr>
                                     <th>Protocol</th>
-                                    <th>Capture A Share</th>
-                                    <th>Capture B Share</th>
-                                    <th>Share Shift (&Delta;%)</th>
+                                    <th style="text-align: right;">Capture A Share</th>
+                                    <th style="text-align: right;">Capture B Share</th>
+                                    <th style="text-align: right;">Shift (&Delta; pt)</th>
                                 </tr>
                             </thead>
                             <tbody id="compare-protocols-tbody"></tbody>
@@ -623,29 +743,76 @@
                     </div>
                 </div>
 
-                <div id="compare-placeholder" class="empty-state">
-                    Upload a secondary PCAP file or click "Compare with Baseline Sample" above to run comparative analysis.
+                <div id="compare-placeholder" class="empty-state-notice">
+                    Click <strong>Compare with Baseline Sample</strong> or upload a second PCAP file above to begin differential telemetry analysis.
                 </div>
+            </div>
+            <div class="modal-sheet-footer">
+                <button class="btn btn-outline btn-sm" onclick="document.getElementById('modal-compare').style.display='none'">Close</button>
             </div>
         </div>
     </div>
 
-    <!-- Processing / Loading Overlay -->
-    <div id="loading-overlay" class="modal-overlay" style="display:none; z-index:2000;">
-        <div class="spinner-card">
-            <div class="status-dot status-running" style="width:16px; height:16px;"></div>
-            <div id="loading-overlay-text" style="font-weight:600; font-size:13px; color:var(--text-primary);">Ingesting capture stream...</div>
-            <div style="font-size:11px; color:var(--text-secondary);">Extracting multi-layer headers, tracking 5-tuples and computing analytics</div>
+    <!-- Modal 4: Heuristic Anomaly Threshold Configuration -->
+    <div class="modal-backdrop" id="config-modal" style="display:none;">
+        <div class="modal-sheet" style="width: 580px;">
+            <div class="modal-sheet-header">
+                <div class="modal-title-wrap">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"/>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
+                    <h3 class="modal-title-text">Heuristic Anomaly Thresholds</h3>
+                </div>
+                <button class="btn btn-ghost btn-sm" id="btn-close-config">&times;</button>
+            </div>
+            <div class="modal-sheet-body">
+                <div id="config-error-msg" class="notification-banner error" style="display:none; position: static;"></div>
+
+                <div style="display: flex; flex-direction: column; gap: 12px;">
+                    <div>
+                        <label style="display: block; font-size: 11.5px; font-weight: 600; margin-bottom: 4px;">SYN Flood Threshold (SYN Packets)</label>
+                        <input type="number" id="cfg-syn-flood" class="form-input" style="width: 100%;" min="1" max="1000">
+                        <span style="font-size: 10.5px; color: var(--text-muted);">Number of standalone SYN packets without ACK in sliding 5-second window.</span>
+                    </div>
+
+                    <div>
+                        <label style="display: block; font-size: 11.5px; font-weight: 600; margin-bottom: 4px;">Port Scan Threshold (Distinct Destination Ports)</label>
+                        <input type="number" id="cfg-port-scan" class="form-input" style="width: 100%;" min="1" max="500">
+                        <span style="font-size: 10.5px; color: var(--text-muted);">Distinct target ports probed from a single source host in sliding window.</span>
+                    </div>
+
+                    <div>
+                        <label style="display: block; font-size: 11.5px; font-weight: 600; margin-bottom: 4px;">Packet Rate Spike Threshold (Packets / Sec)</label>
+                        <input type="number" id="cfg-packet-rate" class="form-input" style="width: 100%;" min="10" max="100000">
+                        <span style="font-size: 10.5px; color: var(--text-muted);">Mean arrival rate threshold triggering volumetric alert.</span>
+                    </div>
+
+                    <div>
+                        <label style="display: block; font-size: 11.5px; font-weight: 600; margin-bottom: 4px;">Byte Rate Spike Threshold (Bytes / Sec)</label>
+                        <input type="number" id="cfg-byte-rate" class="form-input" style="width: 100%;" min="1024" max="100000000">
+                    </div>
+
+                    <div>
+                        <label style="display: block; font-size: 11.5px; font-weight: 600; margin-bottom: 4px;">Host Dominance Ratio (Fraction of Total Volume)</label>
+                        <input type="number" id="cfg-host-ratio" class="form-input" style="width: 100%;" min="0.1" max="1.0" step="0.05">
+                    </div>
+
+                    <div>
+                        <label style="display: block; font-size: 11.5px; font-weight: 600; margin-bottom: 4px;">Alert Cooldown Period (Seconds)</label>
+                        <input type="number" id="cfg-cooldown" class="form-input" style="width: 100%;" min="1" max="60">
+                    </div>
+                </div>
+            </div>
+            <div class="modal-sheet-footer">
+                <button class="btn btn-outline btn-sm" id="btn-cancel-config">Cancel</button>
+                <button class="btn btn-primary btn-sm" id="btn-save-config">Save Thresholds</button>
+            </div>
         </div>
     </div>
 
-    <!-- Application Footer -->
-    <footer class="app-footer">
-        <p>NetScope Traffic Intelligence Platform &bull; Computer Networks Academic Mini-Project &bull; Python / Flask / Scapy / SQLite &bull; Strictly Localhost Execution</p>
-    </footer>
-
     <!-- Scripts -->
-    <script src="/static/js/charts.js"></script>
-    <script src="/static/js/dashboard.js"></script>
+    <script src="/static/js/charts.js?v=3.1"></script>
+    <script src="/static/js/dashboard.js?v=3.1"></script>
 </body>
 </html>

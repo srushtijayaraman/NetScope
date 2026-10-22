@@ -317,6 +317,8 @@ def get_stats():
         summary = active_session["analytics"].get_summary()
         flow_count = active_session["flow_tracker"].get_flow_count()
         summary["active_flows"] = flow_count
+        summary["filename"] = active_session["filename"]
+        summary["mode"] = active_session["mode"]
         return jsonify(summary)
 
 

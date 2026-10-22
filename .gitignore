@@ -43,3 +43,4 @@ data/*.pcap
 Thumbs.db
 .vscode/
 .idea/
+scratch/

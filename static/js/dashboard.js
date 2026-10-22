@@ -195,7 +195,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 current = null;
             }
             if (!current) {
-                current = (window.matchMedia && window.matchMedia("(prefers-color-scheme: light)").matches) ? "light" : "dark";
+                current = "dark";
             }
             document.documentElement.setAttribute("data-theme", current);
         }
@@ -216,17 +216,22 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     }
 
-    function toggleTheme() {
-        const current = document.documentElement.getAttribute("data-theme") || "dark";
-        const next = (current === "dark") ? "light" : "dark";
-        document.documentElement.setAttribute("data-theme", next);
+    function setTheme(theme) {
+        if (!theme || (theme !== "light" && theme !== "dark")) return;
+        document.documentElement.setAttribute("data-theme", theme);
         try {
-            localStorage.setItem("netscope_theme", next);
+            localStorage.setItem("netscope_theme", theme);
         } catch (e) {
             console.warn("localStorage unavailable for theme preference:", e);
         }
-        updateThemeUI(next);
-        NetScopeCharts.setTheme(next);
+        updateThemeUI(theme);
+        NetScopeCharts.setTheme(theme);
+    }
+
+    function toggleTheme() {
+        const current = document.documentElement.getAttribute("data-theme") || "dark";
+        const next = (current === "dark") ? "light" : "dark";
+        setTheme(next);
     }
 
     if (elements.btnThemeToggle) {
@@ -277,13 +282,32 @@ document.addEventListener("DOMContentLoaded", () => {
             elements.processingPps.textContent = `Processing: ${(data.processing_pps || 0).toFixed(1)} pps`;
             elements.totalBytes.textContent = formatBytes(data.total_bytes || 0);
             elements.avgPacketSize.textContent = `Avg Size: ${(data.average_packet_size_bytes || 0).toFixed(1)} B`;
-            elements.capturePps.innerHTML = `${(data.capture_pps || 0).toFixed(2)} <span class="unit">pps</span>`;
+            elements.capturePps.textContent = (data.capture_pps || 0).toFixed(2);
             elements.captureDuration.textContent = `Span: ${(data.capture_duration_seconds || 0).toFixed(2)}s`;
-            elements.throughput.innerHTML = `${(data.throughput_kbps || 0).toFixed(2)} <span class="unit">kbps</span>`;
+            elements.throughput.textContent = (data.throughput_kbps || 0).toFixed(2);
             elements.throughputMbps.textContent = `${(data.throughput_mbps || 0).toFixed(4)} Mbps`;
             elements.uniqueHosts.textContent = (data.unique_hosts || 0).toLocaleString();
             elements.activeFlows.textContent = `${(data.active_flows || 0).toLocaleString()} Total Active Flows`;
             elements.errorsDrops.textContent = `${data.parsing_errors || 0} / ${data.queue_drops || 0}`;
+
+            const activeFileName = data.filename || (elements.sessionBadge ? elements.sessionBadge.textContent : null) || "sample_traffic.pcap";
+            if (data.filename && elements.sessionBadge) {
+                elements.sessionBadge.textContent = data.filename;
+                elements.sessionBadge.title = data.filename;
+            }
+            if (data.mode && elements.modeBadge) {
+                elements.modeBadge.textContent = data.mode === "live" ? "Mode: Live Interface" : `Mode: ${data.mode.toUpperCase()}`;
+            }
+            const activeFileEl = document.getElementById("active-filename-display");
+            if (activeFileEl) {
+                activeFileEl.textContent = activeFileName;
+            }
+            const ctxPackets = document.getElementById("val-context-packets");
+            if (ctxPackets) ctxPackets.textContent = (data.total_packets || 0).toLocaleString();
+            const ctxBytes = document.getElementById("val-context-bytes");
+            if (ctxBytes) ctxBytes.textContent = formatBytes(data.total_bytes || 0);
+            const ctxSpan = document.getElementById("val-context-span");
+            if (ctxSpan) ctxSpan.textContent = `${(data.capture_duration_seconds || 0).toFixed(2)}s`;
         } catch (err) {
             console.error("Stats refresh error:", err);
         }
@@ -770,6 +794,7 @@ document.addEventListener("DOMContentLoaded", () => {
             showNotification(`Failed to load packet details: ${err.message}`, "error");
         }
     }
+    const inspectPacket = showPacketModal;
 
     elements.btnCloseModal.addEventListener("click", () => {
         elements.modal.style.display = "none";
@@ -837,6 +862,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 elements.modeBadge.textContent = "Mode: Offline PCAP";
                 elements.sessionBadge.textContent = data.filename;
                 elements.sessionBadge.title = data.filename;
+                const activeFileEl = document.getElementById("active-filename-display");
+                if (activeFileEl) activeFileEl.textContent = data.filename;
                 state.currentPage = 1;
                 await refreshAll();
             } else {
@@ -871,6 +898,8 @@ document.addEventListener("DOMContentLoaded", () => {
                 elements.modeBadge.textContent = "Mode: Offline Sample";
                 elements.sessionBadge.textContent = "sample_traffic.pcap";
                 elements.sessionBadge.title = "sample_traffic.pcap";
+                const activeFileEl = document.getElementById("active-filename-display");
+                if (activeFileEl) activeFileEl.textContent = "sample_traffic.pcap";
                 state.currentPage = 1;
                 clearFlowFilter();
                 await refreshAll();
@@ -1386,6 +1415,80 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    // ==========================================================================
+    // Sidebar Tool Triggers & Navigation Controller
+    // ==========================================================================
+    const btnSidebarCompare = document.getElementById("btn-sidebar-compare");
+    if (btnSidebarCompare) {
+        btnSidebarCompare.addEventListener("click", openCompareModal);
+    }
+    const btnSidebarReport = document.getElementById("btn-sidebar-report");
+    if (btnSidebarReport) {
+        btnSidebarReport.addEventListener("click", () => {
+            window.open("/api/export/report", "_blank");
+        });
+    }
+    const btnSidebarConfig = document.getElementById("btn-sidebar-config");
+    if (btnSidebarConfig) {
+        btnSidebarConfig.addEventListener("click", openConfigModal);
+    }
+
+    // Sidebar Navigation & Section Sync
+    const navButtons = document.querySelectorAll(".nav-item-btn[data-target]");
+    const breadcrumbTitle = document.getElementById("topbar-breadcrumb");
+    const navTitles = {
+        "section-overview": "Overview",
+        "section-explorer": "Packet Stream",
+        "section-flows": "Conversations",
+        "section-alerts": "Threat Intelligence"
+    };
+
+    function setActiveNav(targetId) {
+        navButtons.forEach(btn => {
+            if (btn.getAttribute("data-target") === targetId) {
+                btn.classList.add("active");
+            } else {
+                btn.classList.remove("active");
+            }
+        });
+        if (breadcrumbTitle && navTitles[targetId]) {
+            breadcrumbTitle.textContent = navTitles[targetId];
+        }
+    }
+
+    navButtons.forEach(btn => {
+        btn.addEventListener("click", (e) => {
+            e.preventDefault();
+            const targetId = btn.getAttribute("data-target");
+            const targetEl = document.getElementById(targetId);
+            if (targetEl) {
+                setActiveNav(targetId);
+                targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+            }
+        });
+    });
+
+    // IntersectionObserver for auto-updating active navigation item on scroll
+    if ("IntersectionObserver" in window) {
+        const observedSections = ["section-overview", "section-explorer", "section-flows", "section-alerts"]
+            .map(id => document.getElementById(id))
+            .filter(Boolean);
+
+        const sectionObserver = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    setActiveNav(entry.target.id);
+                }
+            });
+        }, {
+            root: null,
+            rootMargin: "-15% 0px -70% 0px",
+            threshold: 0
+        });
+
+        observedSections.forEach(sec => sectionObserver.observe(sec));
+    }
+
     // Global Modal Escape Key Listener
     document.addEventListener("keydown", (e) => {
         if (e.key === "Escape") {
@@ -1397,28 +1500,61 @@ document.addEventListener("DOMContentLoaded", () => {
     });
 
     // ==========================================================================
-    // Initialization
+    // Initialization & Direct Deep-Linking Orchestration
     // ==========================================================================
     initTheme();
     refreshInterfaces();
     refreshAll();
 
-    // Check URL parameters for direct deep-linking or automated capture
     const urlParams = new URLSearchParams(window.location.search);
     if (urlParams.get("theme")) {
         setTheme(urlParams.get("theme"));
     }
+
+    // Clean single-parameter view routing (e.g. ?view=inspect:3:dark, ?view=flow:flow-3:dark, ?view=compare:dark, ?view=stream:dark)
+    const viewParam = urlParams.get("view");
+    if (viewParam) {
+        const parts = viewParam.split(":");
+        const action = parts[0];
+        const arg = parts[1];
+        const viewTheme = parts[2] || (arg === "dark" || arg === "light" ? arg : null);
+
+        if (viewTheme) {
+            setTheme(viewTheme);
+        }
+
+        setTimeout(() => {
+            if (action === "inspect" && arg) {
+                showPacketModal(parseInt(arg));
+            } else if (action === "flow" && arg) {
+                openFlowTimeline(arg);
+            } else if (action === "compare") {
+                openCompareModal();
+                const fd = new FormData();
+                fd.append("compare_sample", "true");
+                runCaptureComparison(fd);
+            } else if (action === "stream") {
+                const el = document.getElementById("section-explorer");
+                const mainContainer = document.querySelector(".app-main");
+                if (el && mainContainer) {
+                    mainContainer.scrollTop = el.offsetTop - 10;
+                    setActiveNav("section-explorer");
+                }
+            }
+        }, 400);
+    }
+
     const inspectPktId = urlParams.get("inspect");
     if (inspectPktId) {
         setTimeout(() => {
-            inspectPacket(parseInt(inspectPktId));
-        }, 800);
+            showPacketModal(parseInt(inspectPktId));
+        }, 400);
     }
     const inspectFlowId = urlParams.get("inspect_flow");
     if (inspectFlowId) {
         setTimeout(() => {
             openFlowTimeline(inspectFlowId);
-        }, 800);
+        }, 400);
     }
     const openCompare = urlParams.get("open_compare");
     if (openCompare) {
@@ -1427,13 +1563,19 @@ document.addEventListener("DOMContentLoaded", () => {
             const fd = new FormData();
             fd.append("compare_sample", "true");
             await runCaptureComparison(fd);
-        }, 800);
+        }, 400);
     }
     const scrollToSection = urlParams.get("section");
     if (scrollToSection) {
         setTimeout(() => {
             const el = document.getElementById(scrollToSection);
-            if (el) el.scrollIntoView({ behavior: "instant", block: "start" });
-        }, 800);
+            const mainContainer = document.querySelector(".app-main");
+            if (el && mainContainer) {
+                mainContainer.scrollTop = el.offsetTop - 10;
+                setActiveNav(scrollToSection);
+            } else if (el) {
+                el.scrollIntoView({ behavior: "instant", block: "start" });
+            }
+        }, 400);
     }
 });
