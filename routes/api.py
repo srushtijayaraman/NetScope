@@ -19,8 +19,12 @@ from analyzer.parser import parse_packet
 from analyzer.flow_tracker import FlowTracker
 from analytics.statistics import TrafficAnalytics
 from analytics.anomaly_detector import AnomalyDetector
+from analytics.incident_correlator import IncidentCorrelator
+from analytics.topology import build_network_topology
+from analytics.investigation_manager import generate_case_html_report
 from analytics.capture_comparator import compare_captures, analyze_standalone_pcap
 from analytics.report_generator import generate_html_report
+from capture.replay_engine import ReplayEngine, SCENARIO_METADATA
 from storage.database import DatabaseManager
 
 api_bp = Blueprint("api", __name__, url_prefix="/api")
@@ -37,19 +41,28 @@ active_session = {
     "analytics": TrafficAnalytics(),
     "flow_tracker": FlowTracker(),
     "anomaly_detector": None,
+    "incident_correlator": IncidentCorrelator(),
 }
 
 live_manager = LiveCaptureManager()
+replay_engine = ReplayEngine()
 
 
 def get_db():
-    db_path = current_app.config.get("DATABASE_PATH", "storage/netscope.db")
+    try:
+        db_path = current_app.config.get("DATABASE_PATH", "storage/netscope.db")
+    except RuntimeError:
+        db_path = "storage/netscope.db"
     return DatabaseManager(db_path)
 
 
 def get_detector():
     if active_session["anomaly_detector"] is None:
-        active_session["anomaly_detector"] = AnomalyDetector(current_app.config)
+        try:
+            cfg = current_app.config
+        except RuntimeError:
+            cfg = None
+        active_session["anomaly_detector"] = AnomalyDetector(cfg)
     return active_session["anomaly_detector"]
 
 
@@ -63,10 +76,12 @@ def reset_active_session(capture_id: str, filename: str, mode: str):
         active_session["flow_tracker"].reset()
         detector = get_detector()
         detector.reset()
+        if "incident_correlator" in active_session and active_session["incident_correlator"]:
+            active_session["incident_correlator"].reset()
 
 
 def on_packet_received(record: dict):
-    """Callback used by both offline reader and live capture worker."""
+    """Callback used by offline reader, live capture worker, and replay lab."""
     with session_lock:
         active_session["analytics"].ingest_packet(record)
         active_session["flow_tracker"].process_packet(record)
@@ -76,11 +91,20 @@ def on_packet_received(record: dict):
         new_alerts = detector.evaluate_packet(record)
         if new_alerts:
             db = get_db()
+            correlator = active_session.get("incident_correlator")
+            fid = record.get("flow_id")
+            related_flows = [fid] if fid else []
             for alt in new_alerts:
                 db.save_alert(active_session["capture_id"] or "live", alt)
+                if correlator:
+                    inc = correlator.correlate_alert(alt, capture_id=active_session["capture_id"] or "live", related_flows=related_flows)
+                    db.upsert_incident(inc)
 
         # Retain bounded packet history in memory for table exploration
-        max_pkts = current_app.config.get("MAX_MEMORY_PACKETS", 10000)
+        try:
+            max_pkts = current_app.config.get("MAX_MEMORY_PACKETS", 10000)
+        except RuntimeError:
+            max_pkts = 10000
         if len(active_session["packets"]) < max_pkts:
             active_session["packets"].append(record)
 
@@ -172,8 +196,12 @@ def upload_pcap():
             status="COMPLETED",
         )
         db.save_summary(capture_id, summary)
+        correlator = active_session.get("incident_correlator")
         for alt in batch_alerts:
             db.save_alert(capture_id, alt)
+            if correlator:
+                inc = correlator.correlate_alert(alt, capture_id=capture_id)
+                db.upsert_incident(inc)
 
     return jsonify({
         "success": True,
@@ -227,8 +255,12 @@ def load_sample():
             status="COMPLETED",
         )
         db.save_summary(capture_id, summary)
+        correlator = active_session.get("incident_correlator")
         for alt in batch_alerts:
             db.save_alert(capture_id, alt)
+            if correlator:
+                inc = correlator.correlate_alert(alt, capture_id=capture_id)
+                db.upsert_incident(inc)
 
     return jsonify({
         "success": True,
@@ -317,8 +349,6 @@ def get_stats():
         summary = active_session["analytics"].get_summary()
         flow_count = active_session["flow_tracker"].get_flow_count()
         summary["active_flows"] = flow_count
-        summary["filename"] = active_session["filename"]
-        summary["mode"] = active_session["mode"]
         return jsonify(summary)
 
 
@@ -733,3 +763,279 @@ def compare_capture_files():
                     os.remove(p)
                 except Exception:
                     pass
+
+
+# =====================================================================
+# FEATURE A: INTERACTIVE NETWORK TOPOLOGY ENDPOINTS
+# =====================================================================
+
+@api_bp.route("/topology", methods=["GET"])
+def get_topology():
+    """Generates an interactive host communication graph from active flows and alerts."""
+    min_packets = request.args.get("min_packets", 1, type=int)
+    protocol_filter = request.args.get("protocol", "").strip()
+    search = request.args.get("search", "").strip()
+
+    with session_lock:
+        flows = active_session["flow_tracker"].get_top_flows(limit=1000)
+        alerts = get_detector().get_all_alerts()
+    topology = build_network_topology(
+        flows=flows,
+        alerts=alerts,
+        min_packets=min_packets,
+        protocol_filter=protocol_filter,
+        search=search,
+    )
+    return jsonify(topology)
+
+
+# =====================================================================
+# FEATURE B: SECURITY INCIDENT CENTER ENDPOINTS
+# =====================================================================
+
+@api_bp.route("/incidents", methods=["GET"])
+def list_incidents():
+    """Returns correlated security incidents with status, severity, and host filters."""
+    status = request.args.get("status")
+    severity = request.args.get("severity")
+    host = request.args.get("host")
+
+    with session_lock:
+        correlator = active_session.get("incident_correlator")
+        mem_incidents = correlator.get_all_incidents(status=status, severity=severity, host=host) if correlator else []
+
+    if not mem_incidents:
+        db = get_db()
+        db_incidents = db.get_incidents(status=status, severity=severity)
+        return jsonify({"incidents": db_incidents})
+
+    return jsonify({"incidents": mem_incidents})
+
+
+@api_bp.route("/incidents/<incident_id>", methods=["GET"])
+def get_incident_detail(incident_id: str):
+    """Retrieves detailed forensic evidence and context for a specific incident."""
+    with session_lock:
+        correlator = active_session.get("incident_correlator")
+        inc = correlator.get_incident(incident_id) if correlator else None
+
+    if not inc:
+        db = get_db()
+        inc = db.get_incident(incident_id)
+
+    if not inc:
+        return jsonify({"error": f"Incident {incident_id} not found."}), 404
+
+    return jsonify(inc)
+
+
+@api_bp.route("/incidents/<incident_id>", methods=["PATCH"])
+def update_incident(incident_id: str):
+    """Updates investigation status and analyst notes for a security incident."""
+    data = request.get_json() or {}
+    new_status = data.get("status")
+    notes = data.get("analyst_notes")
+    if not new_status and notes is None:
+        return jsonify({"error": "No status or notes provided for update."}), 400
+
+    updated_inc = None
+    with session_lock:
+        correlator = active_session.get("incident_correlator")
+        if correlator:
+            updated_inc = correlator.update_status(incident_id, new_status or "New", notes)
+
+    db = get_db()
+    db.update_incident_status(incident_id, new_status or (updated_inc.get("status") if updated_inc else "New"), notes)
+    if not updated_inc:
+        updated_inc = db.get_incident(incident_id)
+
+    return jsonify({"success": True, "incident": updated_inc})
+
+
+# =====================================================================
+# FEATURE C: TRAFFIC REPLAY & DEMONSTRATION LAB ENDPOINTS
+# =====================================================================
+
+@api_bp.route("/replay/scenarios", methods=["GET"])
+def get_replay_scenarios():
+    """Lists available deterministic demonstration lab scenarios and current state."""
+    return jsonify({
+        "scenarios": list(SCENARIO_METADATA.values()),
+        "current_status": replay_engine.get_status(),
+    })
+
+
+@api_bp.route("/replay/status", methods=["GET"])
+def get_replay_status():
+    """Polls real-time progress, speed, and rule hits of the demonstration replay engine."""
+    return jsonify(replay_engine.get_status())
+
+
+@api_bp.route("/replay/start", methods=["POST"])
+def start_replay():
+    """Initializes and runs a deterministic traffic scenario."""
+    data = request.get_json() or {}
+    scenario_id = data.get("scenario_id", "normal_traffic")
+    speed = float(data.get("speed", 2.0))
+
+    if scenario_id not in SCENARIO_METADATA:
+        return jsonify({"error": f"Invalid demonstration scenario ID: {scenario_id}"}), 400
+
+    # Reset active session state for demonstration replay
+    scenario_info = SCENARIO_METADATA[scenario_id]
+    reset_active_session(
+        capture_id=f"replay-{scenario_id}-{uuid.uuid4().hex[:6]}",
+        filename=f"{scenario_info['name']} (Lab Replay)",
+        mode="replay",
+    )
+
+    app = current_app._get_current_object()
+    def context_aware_callback(record):
+        with app.app_context():
+            on_packet_received(record)
+
+    status = replay_engine.start(scenario_id, packet_callback=context_aware_callback, speed=speed)
+    return jsonify({"success": True, "status": status})
+
+
+@api_bp.route("/replay/pause", methods=["POST"])
+def pause_replay():
+    """Temporarily pauses the demonstration replay player."""
+    return jsonify({"success": True, "status": replay_engine.pause()})
+
+
+@api_bp.route("/replay/resume", methods=["POST"])
+def resume_replay():
+    """Resumes a paused demonstration replay player."""
+    return jsonify({"success": True, "status": replay_engine.resume()})
+
+
+@api_bp.route("/replay/stop", methods=["POST"])
+def stop_replay():
+    """Halts demonstration replay execution."""
+    return jsonify({"success": True, "status": replay_engine.stop()})
+
+
+@api_bp.route("/replay/reset", methods=["POST"])
+def reset_replay():
+    """Stops replay and restores the workbench to a clean idle state."""
+    replay_engine.reset()
+    reset_active_session(capture_id="", filename="", mode="idle")
+    return jsonify({"success": True, "status": replay_engine.get_status()})
+
+
+# =====================================================================
+# FEATURE F: INVESTIGATION CASES & REPORTING ENDPOINTS
+# =====================================================================
+
+@api_bp.route("/cases", methods=["GET"])
+def list_cases():
+    """Returns all forensic investigation cases."""
+    db = get_db()
+    cases = db.get_cases()
+    return jsonify({"cases": cases})
+
+
+@api_bp.route("/cases", methods=["POST"])
+def create_case():
+    """Creates a new security investigation case."""
+    data = request.get_json() or {}
+    title = data.get("title", "").strip()
+    if not title:
+        return jsonify({"error": "Case title is required."}), 400
+
+    case_id = data.get("case_id") or f"CASE-{int(time.time())}"
+    summary = data.get("summary", "")
+    priority = data.get("priority", "Medium")
+    status = data.get("status", "Open")
+    analyst = data.get("analyst", "SecOps Analyst")
+
+    db = get_db()
+    db.create_case(case_id, title, summary, priority, status, analyst)
+
+    # Attach initial artifacts
+    for art in data.get("artifacts", []):
+        db.attach_case_artifact(
+            case_id,
+            art.get("artifact_type", "reference"),
+            str(art.get("artifact_id", "")),
+            art.get("metadata", {}),
+        )
+
+    # Add initial note if present
+    if data.get("initial_note"):
+        db.add_case_note(case_id, data["initial_note"], author=analyst)
+
+    return jsonify({"success": True, "case": db.get_case(case_id)}), 201
+
+
+@api_bp.route("/cases/<case_id>", methods=["GET"])
+def get_case(case_id: str):
+    """Retrieves full investigation case details including notes and forensic artifacts."""
+    db = get_db()
+    case = db.get_case(case_id)
+    if not case:
+        return jsonify({"error": f"Case {case_id} not found."}), 404
+    return jsonify(case)
+
+
+@api_bp.route("/cases/<case_id>", methods=["PATCH"])
+def update_case(case_id: str):
+    """Updates case metadata (title, summary, status, priority, analyst)."""
+    data = request.get_json() or {}
+    db = get_db()
+    updated = db.update_case(case_id, data)
+    if not updated:
+        return jsonify({"error": f"Case {case_id} not found."}), 404
+    return jsonify({"success": True, "case": updated})
+
+
+@api_bp.route("/cases/<case_id>/notes", methods=["POST"])
+def add_case_note(case_id: str):
+    """Appends an analyst note/finding to the investigation case."""
+    data = request.get_json() or {}
+    note = data.get("note", "").strip()
+    if not note:
+        return jsonify({"error": "Note text is required."}), 400
+    author = data.get("author", "SecOps Analyst")
+
+    db = get_db()
+    if not db.get_case(case_id):
+        return jsonify({"error": f"Case {case_id} not found."}), 404
+    created_note = db.add_case_note(case_id, note, author=author)
+    return jsonify({"success": True, "note": created_note}), 201
+
+
+@api_bp.route("/cases/<case_id>/artifacts", methods=["POST"])
+def attach_case_artifact(case_id: str):
+    """Attaches a forensic artifact (incident, packet, flow, host) to the case."""
+    data = request.get_json() or {}
+    art_type = data.get("artifact_type", "reference")
+    art_id = data.get("artifact_id")
+    if not art_id:
+        return jsonify({"error": "artifact_id is required."}), 400
+    metadata = data.get("metadata", {})
+
+    db = get_db()
+    if not db.get_case(case_id):
+        return jsonify({"error": f"Case {case_id} not found."}), 404
+    attached = db.attach_case_artifact(case_id, art_type, str(art_id), metadata)
+    return jsonify({"success": True, "artifact": attached}), 201
+
+
+@api_bp.route("/cases/<case_id>/report", methods=["GET"])
+def export_case_report(case_id: str):
+    """Generates and exports a standalone, print-ready HTML case investigation report."""
+    db = get_db()
+    case = db.get_case(case_id)
+    if not case:
+        return jsonify({"error": f"Case {case_id} not found."}), 404
+    html_report = generate_case_html_report(case)
+    download = request.args.get("download", "0") == "1"
+    disposition = "attachment" if download else "inline"
+    report_filename = f"netscope_case_{case_id}_{int(time.time())}.html"
+    return Response(
+        html_report,
+        mimetype="text/html",
+        headers={"Content-Disposition": f"{disposition}; filename={report_filename}"},
+    )

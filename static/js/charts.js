@@ -1,6 +1,6 @@
 /**
  * NetScope Plotly Chart Rendering Engine
- * Quietly Technical Design System: Muted Teal, Slate Neutrals, and Precision Typography
+ * Implements high-performance, responsive charts with dynamic Light and Dark theme integration.
  */
 
 const NetScopeCharts = (() => {
@@ -10,50 +10,46 @@ const NetScopeCharts = (() => {
     let lastTimelineData = null;
     let lastTimelineMetric = "pps";
 
-    const fontStack = 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
-
     const themes = {
         dark: {
             paper_bgcolor: "transparent",
             plot_bgcolor: "transparent",
-            font: { family: fontStack, color: "#95A3A0", size: 11 },
-            gridcolor: "#242D2B",
-            zerolinecolor: "#313D3A",
-            donutTextColor: "#EAEFEC",
-            ppsLine: "#2DD4BF",
-            ppsFill: "rgba(45, 212, 191, 0.12)",
-            kbpsLine: "#38BDF8",
-            kbpsFill: "rgba(56, 189, 248, 0.12)",
-            donutBorder: "#1B201F",
+            font: { family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", color: "#94a3b8", size: 11 },
+            gridcolor: "#1e293b",
+            zerolinecolor: "#334155",
+            donutTextColor: "#f8fafc",
+            ppsLine: "#38bdf8",
+            ppsFill: "rgba(56, 189, 248, 0.14)",
+            kbpsLine: "#34d399",
+            kbpsFill: "rgba(52, 211, 153, 0.14)",
         },
         light: {
             paper_bgcolor: "transparent",
             plot_bgcolor: "transparent",
-            font: { family: fontStack, color: "#616A67", size: 11 },
-            gridcolor: "#E8E5DF",
-            zerolinecolor: "#DAD6CD",
-            donutTextColor: "#191C1B",
-            ppsLine: "#0D9488",
-            ppsFill: "rgba(13, 148, 136, 0.10)",
-            kbpsLine: "#0284C7",
-            kbpsFill: "rgba(2, 132, 199, 0.10)",
-            donutBorder: "#FFFFFF",
+            font: { family: "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif", color: "#475569", size: 11 },
+            gridcolor: "#e2e8f0",
+            zerolinecolor: "#cbd5e1",
+            donutTextColor: "#0f172a",
+            ppsLine: "#0284c7",
+            ppsFill: "rgba(2, 132, 199, 0.12)",
+            kbpsLine: "#059669",
+            kbpsFill: "rgba(5, 150, 105, 0.12)",
         },
     };
 
     const protocolColors = {
-        TCP: "#0EA5E9",
-        UDP: "#8B5CF6",
-        ICMP: "#F59E0B",
-        ICMPv6: "#D97706",
-        ARP: "#10B981",
-        DNS: "#F43F5E",
-        HTTP: "#0D9488",
-        TLS: "#6366F1",
-        IPv4: "#2DD4BF",
-        IPv6: "#A78BFA",
-        Other: "#64748B",
-        Unknown: "#94A3B8",
+        TCP: "#38bdf8",
+        UDP: "#c084fc",
+        ICMP: "#fbbf24",
+        ICMPv6: "#f59e0b",
+        ARP: "#34d399",
+        DNS: "#f472b6",
+        HTTP: "#4ade80",
+        TLS: "#0ea5e9",
+        IPv4: "#38bdf8",
+        IPv6: "#818cf8",
+        Other: "#64748b",
+        Unknown: "#475569",
     };
 
     function getThemeCfg() {
@@ -85,11 +81,11 @@ const NetScopeCharts = (() => {
         const labels = Object.keys(layerData);
         const counts = labels.map(l => layerData[l].count);
         const percentages = labels.map(l => layerData[l].percentage);
-        const colors = labels.map(l => protocolColors[l] || "#64748B");
+        const colors = labels.map(l => protocolColors[l] || "#94a3b8");
 
         if (labels.length === 0 || counts.reduce((a, b) => a + b, 0) === 0) {
             Plotly.purge(container);
-            container.innerHTML = '<div class="empty-state-notice">No protocol records found for this layer.</div>';
+            container.innerHTML = '<div class="empty-state">No protocol data available for this layer.</div>';
             if (tableContainer) tableContainer.innerHTML = "";
             return;
         }
@@ -100,8 +96,8 @@ const NetScopeCharts = (() => {
             labels: labels,
             values: counts,
             type: "pie",
-            hole: 0.62,
-            marker: { colors: colors, line: { color: t.donutBorder, width: 2 } },
+            hole: 0.58,
+            marker: { colors: colors, line: { color: currentTheme === "dark" ? "#0f172a" : "#ffffff", width: 2 } },
             textinfo: "label+percent",
             hoverinfo: "label+value+percent",
             textposition: "inside",
@@ -114,7 +110,7 @@ const NetScopeCharts = (() => {
             font: t.font,
             margin: { l: 15, r: 15, t: 15, b: 15 },
             annotations: [{
-                font: { size: 11, color: t.donutTextColor, family: t.font.family, weight: "600" },
+                font: { size: 12, color: t.donutTextColor, family: t.font.family, weight: "bold" },
                 showarrow: false,
                 text: selectedLayer.toUpperCase(),
                 x: 0.5,
@@ -125,27 +121,18 @@ const NetScopeCharts = (() => {
         const config = { responsive: true, displayModeBar: false };
         Plotly.react(container, plotData, layout, config);
 
-        // Update mini summary table with progress tracks
+        // Update mini summary table
         if (tableContainer) {
-            let html = '<div class="protocol-rank-list">';
+            let html = '<table class="data-table"><thead><tr><th>Protocol</th><th>Packets</th><th>Share</th></tr></thead><tbody>';
             labels.forEach((lbl, idx) => {
                 const color = colors[idx];
-                const pct = percentages[idx].toFixed(1);
-                html += `
-                <div class="protocol-rank-row">
-                    <div class="protocol-rank-meta">
-                        <span class="protocol-tag" style="--proto-color: ${color}">${lbl}</span>
-                        <div class="protocol-rank-numbers">
-                            <span class="mono protocol-count">${counts[idx].toLocaleString()} pkts</span>
-                            <span class="mono protocol-pct">${pct}%</span>
-                        </div>
-                    </div>
-                    <div class="protocol-progress-track">
-                        <div class="protocol-progress-bar" style="width: ${pct}%; background-color: ${color}"></div>
-                    </div>
-                </div>`;
+                html += `<tr>
+                    <td><span class="badge badge-proto" style="background:${color}22; color:${color}; border: 1px solid ${color}44;">${lbl}</span></td>
+                    <td class="mono">${counts[idx].toLocaleString()}</td>
+                    <td class="mono font-semibold">${percentages[idx].toFixed(1)}%</td>
+                </tr>`;
             });
-            html += '</div>';
+            html += '</tbody></table>';
             tableContainer.innerHTML = html;
         }
     }
@@ -159,14 +146,14 @@ const NetScopeCharts = (() => {
 
         if (!timelineData || timelineData.length === 0) {
             Plotly.purge(container);
-            container.innerHTML = '<div class="empty-state-notice">No timeline events recorded in this capture.</div>';
+            container.innerHTML = '<div class="empty-state">No timeline events recorded in this capture.</div>';
             return;
         }
 
         const t = getThemeCfg();
         const times = timelineData.map(b => new Date(b.timestamp * 1000).toISOString().substr(11, 8));
         const values = metric === "pps" ? timelineData.map(b => b.pps) : timelineData.map(b => b.kbps);
-        const label = metric === "pps" ? "Packets / Sec (PPS)" : "Throughput (kbps)";
+        const label = metric === "pps" ? "Packets / Sec (PPS)" : "Throughput (Kbps)";
         const lineColor = metric === "pps" ? t.ppsLine : t.kbpsLine;
         const fillColor = metric === "pps" ? t.ppsFill : t.kbpsFill;
 
@@ -174,9 +161,10 @@ const NetScopeCharts = (() => {
             x: times,
             y: values,
             type: "scatter",
-            mode: "lines",
+            mode: "lines+markers",
             fill: "tozeroy",
             line: { color: lineColor, width: 2, shape: "spline" },
+            marker: { size: 4, color: lineColor },
             fillcolor: fillColor,
             hoverinfo: "x+y",
             name: label,
@@ -186,18 +174,18 @@ const NetScopeCharts = (() => {
             paper_bgcolor: t.paper_bgcolor,
             plot_bgcolor: t.plot_bgcolor,
             font: t.font,
-            margin: { l: 45, r: 16, t: 16, b: 32 },
+            margin: { l: 45, r: 20, t: 25, b: 35 },
             xaxis: {
                 title: { text: "Time (UTC)", font: { size: 10, color: t.font.color } },
                 gridcolor: t.gridcolor,
                 zerolinecolor: t.zerolinecolor,
-                tickfont: { size: 10, color: t.font.color, family: fontStack },
+                tickfont: { size: 10, color: t.font.color },
             },
             yaxis: {
                 title: { text: label, font: { size: 10, color: t.font.color } },
                 gridcolor: t.gridcolor,
                 zerolinecolor: t.zerolinecolor,
-                tickfont: { size: 10, color: t.font.color, family: fontStack },
+                tickfont: { size: 10, color: t.font.color },
             },
         };
 

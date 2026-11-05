@@ -1,31 +1,64 @@
-# NetScope: Real-Time Network Packet Analyzer & Traffic Intelligence Dashboard
+# NetScope X: Autonomous Network Traffic Intelligence & Security Forensics Platform
 
-[![Python](https://img.shields.io/badge/Python-3.13-blue.svg)](https://www.python.org/)
+[![Python](https://img.shields.io/badge/Python-3.14%2B-blue.svg)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-3.1.3-green.svg)](https://flask.palletsprojects.com/)
 [![Scapy](https://img.shields.io/badge/Scapy-2.8.0-red.svg)](https://scapy.net/)
-[![Tests](https://img.shields.io/badge/Tests-61%20Passed-emerald.svg)](docs/test_report.md)
+[![Tests](https://img.shields.io/badge/Tests-77%20Passed%20(100%25)-emerald.svg)](docs/test_report.md)
+[![Views](https://img.shields.io/badge/Navigation-9%20Unified%20Views-cyan.svg)]()
 [![Themes](https://img.shields.io/badge/UI-Dark%20%7C%20Light%20Modes-indigo.svg)]()
-[![Academic](https://img.shields.io/badge/Category-Computer%20Networks%20Mini--Project-purple.svg)]()
+[![Platform](https://img.shields.io/badge/Release-NetScope%20X%20Enterprise-purple.svg)]()
 
-> **Computer Networks Laboratory Mini-Project Deliverable (Release 3.0 Excellence Upgrade)**  
-> An autonomous, mathematically verified network packet analyzer, statistical intelligence engine, stateful TCP conversation inspector, differential capture comparator, and interactive professional web dashboard with dual Light/Dark theme support.
+> **Computer Networks Laboratory Mini-Project Deliverable (NetScope X Autonomous Upgrade)**  
+> An autonomous, mathematically verified network traffic intelligence platform, stateful TCP conversation inspector, interactive HTML5 network topology graph, SOC security incident center, deterministic demonstration replay lab, and forensic case management engine with print-ready HTML report export and dual Light/Dark theme support.
 
 ---
 
 <p align="center">
-  <img src="docs/screenshots/dashboard_dark.png" alt="NetScope 3.0 Real-Time Packet Analyzer Dashboard" width="95%" />
+  <img src="docs/screenshots/dashboard_dark.png" alt="NetScope X Real-Time Packet Analyzer & SOC Dashboard" width="95%" />
 </p>
 
 <p align="center">
-  <em>NetScope 3.0 real-time dashboard showing live KPI metrics, protocol breakdown, traffic timeline, heuristic alerts, and interactive packet stream.</em>
+  <em>NetScope X real-time dashboard showing the left navigation rail, interactive network map, telemetry charts, correlated security incidents, and demonstration lab.</em>
 </p>
 
 ---
 
-## 1. Project Overview & Highlights
-NetScope ingests network packet captures (offline `.pcap` / `.pcapng` files and live network interfaces), parses multi-layer protocols, computes academically verified traffic metrics, detects stateful security anomalies (SYN floods, port scans), groups conversations into 5-tuple flows, inspects TCP connection lifecycles, compares capture runs side-by-side, and visualizes results on an interactive web dashboard with zero external CDN dependencies.
+## 1. NetScope X Core Capabilities & Architecture
 
-### What's New in NetScope 3.0:
+NetScope X elevates packet analysis from a simple passive viewer into an active, stateful network intelligence platform:
+
+1. **Feature A: Interactive Network Topology (Network Map)**
+   - Renders a native HTML5 Canvas host graph without any external CDN libraries.
+   - Accurately classifies RFC 1918 internal addresses, loopback, multicast, and external IP endpoints.
+   - Computes communication edge weights based on packet and byte volume with animated traffic particles.
+   - High-risk attacker nodes pulsate with an alarming crimson threat halo.
+   - Interactive Host Inspector Drawer displaying transmit/receive metrics, connected peers, active 5-tuple conversations, and 1-click filters.
+
+2. **Feature B & E: Security Incident Center & Explainable SOC Engine**
+   - Automatically correlates raw heuristic alerts into structured, deduplicated security incidents.
+   - Persistent workflow status tracking (`New` -> `Investigating` -> `Resolved`) and timestamped analyst notes.
+   - **Explainable Detection Engine:** Rigorously distinguishes **Observable Network Facts** (deterministic packet counts, timestamps, ports) from **Security Hypotheses** and **Alternative Benign Explanations** (e.g., authorized vulnerability scans, web crawlers, corporate backup sync).
+   - Deep evidence linking: Clickable packet references open the Protocol Layer Inspector; flow references open the TCP Conversation Ladder.
+
+3. **Feature C: Demonstration & Traffic Replay Lab**
+   - Built-in deterministic replay engine with 5 synthetic scenarios:
+     1. `normal_traffic`: Multi-protocol baseline (HTTP, DNS, TLS, ICMP).
+     2. `port_scan`: Rogue endpoint `192.168.1.199` probes 22 ports -> triggers Port Scan Heuristic Alert.
+     3. `syn_flood`: Attacker `10.0.0.88` floods 28 rapid SYNs -> triggers SYN Flood Alert.
+     4. `traffic_spike`: 180 UDP datagram burst -> triggers Packet Rate Spike Alert.
+     5. `benign_burst`: High-volume TCP stream with complete handshakes and ACKs -> **Proves Zero False Positives!**
+   - Player control deck: Paced streaming (1x, 2x, 5x, 10x, Instant), pause/resume/stop, live progress bar, and real-time detection event feed.
+
+4. **Feature D: Unified Flow & Packet Investigation**
+   - Bidirectional 5-tuple tracking with TCP state machine modeling (`ESTABLISHED`, `RESET`, `CLOSING`, `MID_STREAM`).
+   - Chronological TCP handshake and teardown conversation ladder with retransmission accounting.
+   - Full 12-column Packet Explorer with multi-field search, protocol filtering, and layer-by-layer header inspection.
+
+5. **Feature F: Forensic Investigation Cases & Reports Hub**
+   - Full forensic case lifecycle management (`Open`, `In Progress`, `Closed`).
+   - Chronological analyst worklog and evidence artifact attachments (Incidents, Flows, Packets, Hosts).
+   - Standalone, print-ready HTML forensic case reports (`/api/cases/<id>/report`) and full session reports (`/api/export/report`) with zero internet access requirements and strict XSS sanitization.
+   - Differential capture comparison tool for side-by-side metric variance and protocol shift analysis.
 - **Advanced TCP Conversation Inspector**:
   - Chronological ladder tracking SYN, SYN-ACK, ACK, Data segments, FIN teardown, and RST aborts.
   - Directional vector indicators (`A -> B` vs `B -> A`), relative timestamps from connection inception, sequence and acknowledgment tracking, frame length, and retransmission detection.
